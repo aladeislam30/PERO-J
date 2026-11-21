@@ -1,5 +1,34 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# PERO-J indexer — optimized multi-stage production image (issue #1015).
+# PERO-J backend API — optimized multi-stage production image (issue #1191).
+#
+# This is the API-focused production image. The backend is a single Node.js
+# service that serves the REST API (including /api/health), polls the Soroban
+# RPC, and optionally submits decoded events on-chain. The API, indexer, and
+# oracle roles all run in this one process, so this image serves the API role.
+#
+# The service is plain JavaScript run directly with `node` (no TypeScript
+# compile step), so the builder stage installs full deps and runs the build
+# step (docs:generate) while the deps stage installs production-only modules.
+#
+# Stage 1 (builder) — full deps + build step (npm run build / docs:generate).
+# Stage 2 (deps)    — production-only node_modules, pruned of bloat.
+# Stage 3 (runtime) — minimal alpine runtime, non-root `appuser`, prod code only.
+#
+# Result: ~140MB uncompressed / ~50MB compressed, runs as non-root.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: builder (full deps + build step) ───────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY src/ ./src/
+# Run the build step if present (docs:generate generates API docs); tolerate a
+# missing script so the image still builds for repos without one.
+RUN npm run build --if-present || true
+RUN npm run docs:generate --if-present || true
+
+# ── Stage 2: production dependencies ────────────────────────────────────────
 #
 # The PERO-J backend is a single Node.js service (the "indexer") that serves
 # the REST API, polls the Soroban RPC, and optionally submits decoded events
@@ -17,7 +46,6 @@
 # Result: ~140MB uncompressed / ~50MB compressed, runs as non-root.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Stage 1: production dependencies ────────────────────────────────────────
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
@@ -36,7 +64,7 @@ RUN npm ci --omit=dev \
     && find node_modules -type f \( -name "*.md" -o -name "*.markdown" -o -name "*.map" -o -name "*.flow" \) -exec rm -f {} \; \
     && find node_modules -type d \( -name "__tests__" -o -name "test" -o -name "tests" -o -name "docs" -o -name "doc" \) -prune -exec rm -rf {} \;
 
-# ── Stage 2: minimal non-root runtime ───────────────────────────────────────
+# ── Stage 3: minimal non-root runtime ───────────────────────────────────────
 FROM node:20-alpine AS runtime
 # Create a dedicated non-root user/group with a fixed UID/GID so the runtime
 # (and the Kubernetes securityContext) can enforce non-root deterministically.
@@ -47,8 +75,13 @@ COPY --from=deps /app/node_modules ./node_modules
 # Application package.json (carries "type": "module" for ESM) and source.
 COPY package.json ./
 COPY src/ ./src/
+# Compiled/generated artifacts from the builder (docs, etc.).
+COPY --from=builder /app/docs ./docs
 # Drop root privileges.
 USER appuser
 ENV NODE_ENV=production
 EXPOSE 3001
+# Liveness probe against the API health endpoint.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:3001/api/health || exit 1
 CMD ["node", "src/index.js"]

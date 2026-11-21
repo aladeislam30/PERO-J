@@ -28,3 +28,33 @@ groups:
           dashboard_url: "https://grafana.peroj.network/d/rpc-health"
           runbook_url: "https://github.com/john2ydep2-gt/PERO-J/blob/main/docs/ORACLE_ADAPTER_FRESHNESS.md"
           action: "Check Stellar RPC endpoint status, monitor rate limits, and failover to backup RPC provider."
+
+  - name: tls_certificate_alerts
+    rules:
+      - alert: TLSCertificateExpiringSoon
+        expr: tls_certificate_expiry_days < 15
+        for: 1h
+        labels:
+          severity: critical
+          service: tls
+          tier: infrastructure
+        annotations:
+          summary: "TLS certificate expiring soon (< 15 days remaining)"
+          description: "TLS certificate for {{ $labels.instance }} expires in {{ $value }} days, which is below the 15-day threshold. Automated renewal may have failed."
+          dashboard_url: "https://grafana.peroj.network/d/tls-certificates"
+          runbook_url: "https://github.com/john2ydep2-gt/PERO-J/blob/main/docs/TLS_CERTIFICATE_RUNBOOK.md"
+          action: "Verify certbot renewal status, inspect certbot logs, and manually renew the certificate if automated renewal has failed."
+
+      - alert: TLSCertificateRenewalFailed
+        expr: tls_certificate_renewal_failed == 1
+        for: 5m
+        labels:
+          severity: critical
+          service: tls
+          tier: infrastructure
+        annotations:
+          summary: "Automated TLS certificate renewal failed"
+          description: "Automated Let's Encrypt certbot renewal has failed for {{ $labels.instance }}. Certificate may expire and cause platform downtime."
+          dashboard_url: "https://grafana.peroj.network/d/tls-certificates"
+          runbook_url: "https://github.com/john2ydep2-gt/PERO-J/blob/main/docs/TLS_CERTIFICATE_RUNBOOK.md"
+          action: "Inspect certbot logs, verify DNS/HTTP challenge reachability, and run certbot renew manually to restore automated renewal."

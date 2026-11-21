@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# PERO-J indexer — optimized multi-stage production image (issue #1015).
+# PERO-J indexer — canonical multi-stage production image (issue #1191).
 #
 # This is the default build target (`docker build indexer/`) and is the image
 # used by the staging deployment pipeline. It mirrors `Dockerfile.indexer`.
@@ -17,7 +17,7 @@
 # Stage 1 (deps)    — install production-only node_modules and prune bloat.
 # Stage 2 (runtime) — minimal alpine runtime, non-root `appuser`, production code only.
 #
-# Result: ~140MB uncompressed / ~50MB compressed, runs as non-root.
+# Result: under 150MB uncompressed, runs as non-root (UID/GID 10001).
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: production dependencies ────────────────────────────────────────
