@@ -28,6 +28,40 @@ export function loadConfig(env = process.env) {
     /** Optional oracle resolver health endpoint. When unset the component reports "unknown". */
     oracleUrl: env.ORACLE_URL || "",
 
+    /**
+     * Synthetic probe monitoring (issue #1203).
+     *
+     * The frontend is probed from external vantage points to verify end-to-end
+     * availability (DNS + CDN + app), independent of internal backend health.
+     * The Soroban RPC endpoint is probed for response latency from the same
+     * external vantage points.
+     */
+    synthetic: {
+      /** Public frontend base URL probed for end-to-end availability. */
+      frontendUrl: env.STATUS_FRONTEND_URL || "http://localhost:3000",
+      /** Health path appended to the frontend URL; must return HTTP 200. */
+      healthPath: env.STATUS_FRONTEND_HEALTH_PATH || "/health",
+      /** How often synthetic probes run (ms). Defaults to 30s. */
+      intervalMs: num(env.STATUS_SYNTHETIC_INTERVAL_MS, 30_000),
+      /** Per-probe request timeout (ms). */
+      timeoutMs: num(env.STATUS_SYNTHETIC_TIMEOUT_MS, 5_000),
+      /**
+       * External vantage points used to probe the frontend and Soroban RPC.
+       * Comma-separated labels (e.g. "us-east,eu-west,ap-south"). When empty a
+       * single "default" vantage point is used.
+       */
+      vantagePoints: (env.STATUS_SYNTHETIC_VANTAGES || "default")
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean),
+      /** Soroban RPC endpoint probed for latency from external vantage points. */
+      rpcUrl: env.STATUS_SYNTHETIC_RPC_URL || env.RPC_URL || "https://soroban-testnet.stellar.org",
+      /** Frontend response time above which an alert fires (ms). */
+      frontendLatencyAlertMs: num(env.STATUS_FRONTEND_LATENCY_ALERT_MS, 2_500),
+      /** Soroban RPC response time above which RPC is considered degraded (ms). */
+      rpcLatencyDegradedMs: num(env.STATUS_SYNTHETIC_RPC_LATENCY_DEGRADED_MS, 2_000),
+    },
+
     thresholds: {
       /** Latency above which a component is considered degraded (ms). */
       latencyDegradedMs: num(env.STATUS_LATENCY_DEGRADED_MS, 2_000),

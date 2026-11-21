@@ -1,38 +1,59 @@
+version: "3.8"
+
+# Monitoring stack for synthetic probe monitoring (issue #1203).
+# - blackbox-exporter: probes frontend /health (HTTP 200) and Soroban RPC latency
+# - prometheus: scrapes blackbox probes every 30s and evaluates alert rules
+# - alertmanager: routes alerts (frontend response time > 2.5s)
+
 services:
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    container_name: peroj-prometheus
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: blackbox-exporter
     restart: unless-stopped
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
-      - "--web.console.templates=/usr/share/prometheus/consoles"
-      - "--web.enable-lifecycle"
+      - --config.file=/etc/blackbox_exporter/blackbox.yml
+    volumes:
+      - ./monitoring/blackbox/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    ports:
+      - "9115:9115"
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
     ports:
       - "9090:9090"
-    volumes:
-      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./infra/monitoring/alerts:/etc/prometheus/alerts:ro
-      - prometheus-data:/prometheus
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      - blackbox-exporter
+      - alertmanager
+    networks:
+      - monitoring
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
-    container_name: peroj-alertmanager
+    container_name: alertmanager
     restart: unless-stopped
     command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--storage.path=/alertmanager"
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     ports:
       - "9093:9093"
-    volumes:
-      - ./infra/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-      - alertmanager-data:/alertmanager
-    depends_on:
-      - prometheus
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
 
 volumes:
   prometheus-data:
-  alertmanager-data:
