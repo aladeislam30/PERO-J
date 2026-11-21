@@ -1,22 +1,14 @@
 /**
- * backend/shared/notifier.ts
+ * Lightweight Discord/Slack webhook notification bot for high-severity alerts.
  *
- * Lightweight Discord & Slack webhook notification bot for high-severity alerts,
- * oracle disputes, and protocol audit events.
- *
- * Features:
- * - Rich embeds (Discord) and Block Kit attachments (Slack) with severity color bars.
- * - Direct links to the web UI.
- * - Dedicated channel routing:
- *     - #alerts-critical
- *     - #oracle-disputes
- *     - #audit-events
- * - Sliding window rate limiter to guard against alert storms flooding channels.
+ * Formats alert payloads as rich embeds (Discord) / Block Kit attachments
+ * (Slack) with severity color bars and direct links to the web UI, and
+ * rate-limits per channel to prevent flooding during alert storms.
  */
 
-export type AlertSeverity = "critical" | "warning" | "info";
-
 export type AlertChannel = "alerts-critical" | "oracle-disputes" | "audit-events";
+
+export type AlertSeverity = "critical" | "warning" | "info";
 
 export interface AlertField {
   name: string;
@@ -30,329 +22,188 @@ export interface AlertPayload {
   title: string;
   description: string;
   fields?: AlertField[];
+  /** Path (or absolute URL) to the relevant page in the web UI. */
   url?: string;
-  timestamp?: string; // ISO 8601
-  metadata?: Record<string, unknown>;
 }
 
-export interface WebhookConfig {
-  discordWebhookUrls?: Partial<Record<AlertChannel, string>>;
-  slackWebhookUrls?: Partial<Record<AlertChannel, string>>;
-  webUiBaseUrl?: string;
-  rateLimitMaxPerMinute?: number;
+export interface SeverityColor {
+  /** Decimal color used by Discord embeds. */
+  decimal: number;
+  /** Hex color used by Slack attachments. */
+  hex: string;
 }
 
-export interface NotificationResult {
-  sent: boolean;
-  rateLimited?: boolean;
-  destinations: {
-    discord?: boolean;
-    slack?: boolean;
-  };
-  error?: string;
+export const SEVERITY_COLORS: Record<AlertSeverity, SeverityColor> = {
+  critical: { decimal: 0xed4245, hex: "#ed4245" },
+  warning: { decimal: 0xfee75c, hex: "#fee75c" },
+  info: { decimal: 0x5865f2, hex: "#5865f2" },
+};
+
+export interface DiscordEmbed {
+  title: string;
+  description: string;
+  url?: string;
+  color: number;
+  timestamp: string;
+  fields?: AlertField[];
 }
 
-// Severity color codes
-export const SEVERITY_COLORS = {
-  critical: {
-    hex: "#EF4444",
-    decimal: 0xef4444, // Red
-  },
-  warning: {
-    hex: "#F59E0B",
-    decimal: 0xf59e0b, // Amber
-  },
-  info: {
-    hex: "#3B82F6",
-    decimal: 0x3b82f6, // Blue
-  },
-} as const;
+export interface DiscordPayload {
+  embeds: DiscordEmbed[];
+}
+
+export interface SlackBlock {
+  type: string;
+  text?: { type: string; text: string };
+  fields?: { type: string; text: string }[];
+}
+
+export interface SlackAttachment {
+  color: string;
+  blocks: SlackBlock[];
+}
+
+export interface SlackPayload {
+  attachments: SlackAttachment[];
+}
+
+export interface NotifierConfig {
+  webUiBaseUrl: string;
+  /** Optional per-channel webhook URLs. */
+  webhooks?: Partial<Record<AlertChannel, string>>;
+  /** Max alerts per channel per rolling minute. Defaults to 5. */
+  rateLimitPerMinute?: number;
+}
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /**
- * In-memory sliding window rate limiter per channel.
+ * Sliding-window rate limiter keyed by channel. Prevents alert storms from
+ * flooding a single chat channel.
  */
 export class ChannelRateLimiter {
-  private timestamps: Map<AlertChannel, number[]> = new Map();
-  private maxPerMinute: number;
+  private readonly maxPerWindow: number;
+  private readonly windowMs: number;
+  private readonly hits = new Map<string, number[]>();
 
-  constructor(maxPerMinute = 30) {
-    this.maxPerMinute = maxPerMinute;
+  constructor(maxPerWindow = 5, windowMs = RATE_LIMIT_WINDOW_MS) {
+    this.maxPerWindow = maxPerWindow;
+    this.windowMs = windowMs;
   }
 
-  isRateLimited(channel: AlertChannel, now = Date.now()): boolean {
-    const windowStart = now - 60_000;
-    const history = (this.timestamps.get(channel) || []).filter(
-      (ts) => ts > windowStart
-    );
+  /**
+   * Returns true if the channel is currently rate limited. When not limited,
+   * the call records a hit for the channel.
+   */
+  isRateLimited(channel: string, now: number = Date.now()): boolean {
+    const cutoff = now - this.windowMs;
+    const recent = (this.hits.get(channel) ?? []).filter((t) => t > cutoff);
 
-    if (history.length >= this.maxPerMinute) {
-      this.timestamps.set(channel, history);
+    if (recent.length >= this.maxPerWindow) {
+      this.hits.set(channel, recent);
       return true;
     }
 
-    history.push(now);
-    this.timestamps.set(channel, history);
+    recent.push(now);
+    this.hits.set(channel, recent);
     return false;
-  }
-
-  reset(): void {
-    this.timestamps.clear();
   }
 }
 
-/**
- * Notifier bot managing alert payloads, formatting, and webhook dispatches.
- */
 export class NotifierBot {
-  private config: WebhookConfig;
-  private rateLimiter: ChannelRateLimiter;
+  private readonly config: NotifierConfig;
+  private readonly limiter: ChannelRateLimiter;
 
-  constructor(config: WebhookConfig = {}) {
-    this.config = {
-      webUiBaseUrl:
-        config.webUiBaseUrl ||
-        process.env.WEB_UI_BASE_URL ||
-        "https://app.pero-j.io",
-      rateLimitMaxPerMinute:
-        config.rateLimitMaxPerMinute ??
-        (Number(process.env.ALERT_RATE_LIMIT_PER_MINUTE) || 30),
-      discordWebhookUrls: config.discordWebhookUrls || {
-        "alerts-critical": process.env.DISCORD_WEBHOOK_CRITICAL,
-        "oracle-disputes": process.env.DISCORD_WEBHOOK_ORACLE_DISPUTES,
-        "audit-events": process.env.DISCORD_WEBHOOK_AUDIT_EVENTS,
-      },
-      slackWebhookUrls: config.slackWebhookUrls || {
-        "alerts-critical": process.env.SLACK_WEBHOOK_CRITICAL,
-        "oracle-disputes": process.env.SLACK_WEBHOOK_ORACLE_DISPUTES,
-        "audit-events": process.env.SLACK_WEBHOOK_AUDIT_EVENTS,
-      },
-    };
-    this.rateLimiter = new ChannelRateLimiter(this.config.rateLimitMaxPerMinute);
+  constructor(config: NotifierConfig) {
+    this.config = config;
+    this.limiter = new ChannelRateLimiter(config.rateLimitPerMinute ?? 5);
   }
 
-  /**
-   * Format Discord Rich Embed.
-   */
-  formatDiscordPayload(alert: AlertPayload) {
-    const color = SEVERITY_COLORS[alert.severity].decimal;
-    const fullUrl = alert.url
-      ? (alert.url.startsWith("http") ? alert.url : `${this.config.webUiBaseUrl}${alert.url}`)
-      : this.config.webUiBaseUrl;
+  private resolveUrl(url?: string): string | undefined {
+    if (!url) return undefined;
+    if (/^https?:\/\//i.test(url)) return url;
+    const base = this.config.webUiBaseUrl.replace(/\/$/, "");
+    return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+  }
 
-    const embed: Record<string, unknown> = {
+  formatDiscordPayload(alert: AlertPayload): DiscordPayload {
+    const embed: DiscordEmbed = {
       title: `[${alert.severity.toUpperCase()}] ${alert.title}`,
       description: alert.description,
-      color,
-      url: fullUrl,
-      timestamp: alert.timestamp || new Date().toISOString(),
-      footer: {
-        text: `PERO-J Monitoring • #${alert.channel}`,
-      },
+      color: SEVERITY_COLORS[alert.severity].decimal,
+      timestamp: new Date().toISOString(),
     };
 
-    if (alert.fields && alert.fields.length > 0) {
-      embed.fields = alert.fields.map((f) => ({
-        name: f.name,
-        value: f.value,
-        inline: f.inline ?? true,
-      }));
-    }
+    const url = this.resolveUrl(alert.url);
+    if (url) embed.url = url;
+    if (alert.fields?.length) embed.fields = alert.fields;
 
-    return {
-      embeds: [embed],
-    };
+    return { embeds: [embed] };
   }
 
-  /**
-   * Format Slack Block Kit payload with colored attachment bar.
-   */
-  formatSlackPayload(alert: AlertPayload) {
-    const colorHex = SEVERITY_COLORS[alert.severity].hex;
-    const fullUrl = alert.url
-      ? (alert.url.startsWith("http") ? alert.url : `${this.config.webUiBaseUrl}${alert.url}`)
-      : this.config.webUiBaseUrl;
-
-    const blocks: any[] = [
+  formatSlackPayload(alert: AlertPayload): SlackPayload {
+    const blocks: SlackBlock[] = [
       {
         type: "header",
         text: {
           type: "plain_text",
           text: `[${alert.severity.toUpperCase()}] ${alert.title}`,
-          emoji: true,
         },
       },
       {
         type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `${alert.description}\n*Target Channel:* #${alert.channel}`,
-        },
+        text: { type: "mrkdwn", text: alert.description },
       },
     ];
 
-    if (alert.fields && alert.fields.length > 0) {
+    if (alert.fields?.length) {
       blocks.push({
         type: "section",
         fields: alert.fields.map((f) => ({
           type: "mrkdwn",
-          text: `*${f.name}:*\n${f.value}`,
+          text: `*${f.name}*\n${f.value}`,
         })),
       });
     }
 
-    if (fullUrl) {
+    const url = this.resolveUrl(alert.url);
+    if (url) {
       blocks.push({
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "View in Web UI",
-            },
-            url: fullUrl,
-            style: alert.severity === "critical" ? "danger" : "primary",
-          },
-        ],
+        type: "section",
+        text: { type: "mrkdwn", text: `<${url}|View in dashboard>` },
       });
     }
 
     return {
       attachments: [
-        {
-          color: colorHex,
-          blocks,
-        },
+        { color: SEVERITY_COLORS[alert.severity].hex, blocks },
       ],
     };
   }
 
   /**
-   * Dispatch alert to configured webhook endpoints with rate limiting.
+   * Posts an alert to the configured Discord and/or Slack webhook for its
+   * channel. Returns false when rate limited or no webhook is configured.
    */
-  async notify(alert: AlertPayload): Promise<NotificationResult> {
-    if (this.rateLimiter.isRateLimited(alert.channel)) {
-      console.warn(
-        `[NotifierBot] Rate limit exceeded on channel #${alert.channel}. Alert suppressed to prevent storm.`
-      );
-      return {
-        sent: false,
-        rateLimited: true,
-        destinations: {},
-      };
+  async notify(alert: AlertPayload): Promise<boolean> {
+    if (this.limiter.isRateLimited(alert.channel)) {
+      return false;
     }
 
-    const discordUrl = this.config.discordWebhookUrls?.[alert.channel];
-    const slackUrl = this.config.slackWebhookUrls?.[alert.channel];
+    const webhook = this.config.webhooks?.[alert.channel];
+    if (!webhook) return false;
 
-    const results: NotificationResult["destinations"] = {};
+    const isSlack = webhook.includes("hooks.slack.com");
+    const body = isSlack
+      ? this.formatSlackPayload(alert)
+      : this.formatDiscordPayload(alert);
 
-    // Dispatch to Discord
-    if (discordUrl) {
-      try {
-        const body = this.formatDiscordPayload(alert);
-        const res = await fetch(discordUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        results.discord = res.ok;
-      } catch (err: any) {
-        console.error(`[NotifierBot] Discord webhook error: ${err.message}`);
-        results.discord = false;
-      }
-    }
-
-    // Dispatch to Slack
-    if (slackUrl) {
-      try {
-        const body = this.formatSlackPayload(alert);
-        const res = await fetch(slackUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        results.slack = res.ok;
-      } catch (err: any) {
-        console.error(`[NotifierBot] Slack webhook error: ${err.message}`);
-        results.slack = false;
-      }
-    }
-
-    const sent = Boolean(results.discord || results.slack);
-    return {
-      sent,
-      rateLimited: false,
-      destinations: results,
-    };
-  }
-
-  /**
-   * Helper: Send critical system alert to #alerts-critical.
-   */
-  async sendCriticalAlert(
-    title: string,
-    description: string,
-    fields?: AlertField[],
-    url?: string
-  ): Promise<NotificationResult> {
-    return this.notify({
-      channel: "alerts-critical",
-      severity: "critical",
-      title,
-      description,
-      fields,
-      url,
+    const res = await fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
-  }
 
-  /**
-   * Helper: Send dispute alert to #oracle-disputes.
-   */
-  async sendOracleDisputeAlert(
-    marketId: string,
-    title: string,
-    description: string,
-    fields?: AlertField[]
-  ): Promise<NotificationResult> {
-    const extraFields: AlertField[] = [
-      { name: "Market ID", value: `\`${marketId}\``, inline: true },
-      ...(fields || []),
-    ];
-
-    return this.notify({
-      channel: "oracle-disputes",
-      severity: "warning",
-      title,
-      description,
-      fields: extraFields,
-      url: `/markets/${marketId}/disputes`,
-    });
-  }
-
-  /**
-   * Helper: Send audit log event to #audit-events.
-   */
-  async sendAuditEvent(
-    title: string,
-    description: string,
-    actor: string,
-    fields?: AlertField[]
-  ): Promise<NotificationResult> {
-    const extraFields: AlertField[] = [
-      { name: "Actor", value: `\`${actor}\``, inline: true },
-      ...(fields || []),
-    ];
-
-    return this.notify({
-      channel: "audit-events",
-      severity: "info",
-      title,
-      description,
-      fields: extraFields,
-      url: `/audit-logs`,
-    });
+    return res.ok;
   }
 }
-
-export const notifier = new NotifierBot();
