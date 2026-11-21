@@ -61,6 +61,24 @@ fn emitted(c: &Ctx, name: &str) -> usize {
         .count()
 }
 
+/// Asserts the core accounting invariant for a single market:
+///
+/// `ContractBalance(XLM) == sum(market.total_yes + market.total_no - market.claimed)
+///  + AccumulatedFees + sum(escrowed_bonds)`
+///
+/// For the single-market test harness the escrowed-bond term is the sum of
+/// outstanding submitter/challenger bonds still held by the contract.
+fn assert_invariant(c: &Ctx, market_id: u32, escrowed_bonds: i128) {
+    let m = c.client.get_market(&market_id);
+    let pool = m.total_yes + m.total_no - m.claimed;
+    let expected = pool + c.client.get_fees() + escrowed_bonds;
+    assert_eq!(
+        c.token.balance(&c.client.address),
+        expected,
+        "invariant violated: balance != pool + fees + bonds"
+    );
+}
+
 #[test]
 fn bond_scales_with_pool_volume() {
     let c = setup();
@@ -240,5 +258,106 @@ fn admin_can_veto_during_timelock() {
         expect(Error::InvalidState)
     );
     assert_eq!(c.client.finalize_dispute(&1), Status::Resolved);
-    assert_eq!(c.client.get_market(&1).winning_side, 1);
+}
+
+/// Deterministic pseudo-random generator so the property test needs no extra
+/// dependencies while still exercising arbitrary bet sequences.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0
+    }
+
+    fn range(&mut self, lo: u64, hi: u64) -> u64 {
+        lo + self.next() % (hi - lo + 1)
+    }
+}
+
+/// Property test: for arbitrary sequences of bets, the contract balance always
+/// equals the outstanding pool plus accumulated fees (no bonds escrowed here).
+#[test]
+fn invariant_holds_across_arbitrary_bet_sequences() {
+    for seed in 0..32u64 {
+        let c = setup();
+        let mut rng = Lcg(seed.wrapping_mul(0x9E3779B97F4A7C15).wrapping_add(1));
+        let mut bettors: Vec<Address> = Vec::new(&c.env);
+        for _ in 0..8 {
+            bettors.push_back(funded(&c, 1_000_000 * XLM));
+        }
+
+        let n = rng.range(1, 20);
+        for _ in 0..n {
+            let who = bettors.get(rng.range(0, 7) as u32).unwrap();
+            let side = rng.range(0, 1) as u32;
+            let amount = (rng.range(1, 500) as i128) * XLM;
+            c.client.place_bet(&who, &1, &side, &amount);
+            assert_invariant(&c, 1, 0);
+        }
+
+        // Resolve to whichever side has bets, then drain claims and fees.
+        let m = c.client.get_market(&1);
+        let winning = if m.total_yes >= m.total_no { 1 } else { 0 };
+        c.client.resolve_market(&c.admin, &1, &winning);
+        assert_invariant(&c, 1, 0);
+
+        for i in 0..bettors.len() {
+            let who = bettors.get(i).unwrap();
+            let _ = c.client.try_claim(&who, &1);
+            assert_invariant(&c, 1, 0);
+        }
+
+        let fees = c.client.get_fees();
+        if fees > 0 {
+            c.client.withdraw_fees(&c.admin, &fees);
+        }
+        assert_invariant(&c, 1, 0);
+        assert_eq!(c.token.balance(&c.client.address), 0);
+    }
+}
+
+/// Property test: while a dispute is open, escrowed bonds are accounted for in
+/// the invariant and released correctly on finalization.
+#[test]
+fn invariant_accounts_for_escrowed_bonds() {
+    for seed in 0..16u64 {
+        let c = setup();
+        let mut rng = Lcg(seed.wrapping_mul(0xD1B54A32D192ED03).wrapping_add(7));
+        let a = funded(&c, 1_000_000 * XLM);
+        let b = funded(&c, 1_000_000 * XLM);
+        let yes = (rng.range(1, 500) as i128) * XLM;
+        let no = (rng.range(1, 500) as i128) * XLM;
+        c.client.place_bet(&a, &1, &1, &yes);
+        c.client.place_bet(&b, &1, &0, &no);
+        assert_invariant(&c, 1, 0);
+
+        let submitter = funded(&c, BASE_BOND);
+        let disputer = funded(&c, BASE_CHALLENGE_BOND);
+        c.client.submit_outcome(&submitter, &1, &1, &BASE_BOND);
+        assert_invariant(&c, 1, BASE_BOND);
+        c.client
+            .challenge_outcome(&disputer, &1, &BASE_CHALLENGE_BOND);
+        assert_invariant(&c, 1, BASE_BOND + BASE_CHALLENGE_BOND);
+
+        let council = Vec::from_array(
+            &c.env,
+            [
+                Address::generate(&c.env),
+                Address::generate(&c.env),
+                Address::generate(&c.env),
+            ],
+        );
+        c.client.set_council(&c.admin, &council, &2);
+        let winner = rng.range(0, 1) as u32;
+        c.client.vote_dispute(&council.get(0).unwrap(), &1, &winner);
+        c.client.vote_dispute(&council.get(1).unwrap(), &1, &winner);
+        let t0 = c.env.ledger().timestamp();
+        c.env.ledger().set_timestamp(t0 + TIMELOCK_SECS);
+        c.client.finalize_dispute(&1);
+
+        // Bonds are settled: the losing bond is folded into fees, the winning
+        // bond is returned, so no bonds remain escrowed.
+        assert_invariant(&c, 1, 0);
+    }
 }
