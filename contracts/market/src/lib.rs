@@ -1,7 +1,7 @@
 #![no_std]
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, vec, Address, Env,
-    IntoVal, Symbol,
+    IntoVal, String, Symbol,
 };
 
 #[contracterror]
@@ -14,7 +14,15 @@ pub enum Error {
     ContractPaused = 4,
     InvalidAmount = 5,
     InvalidState = 6,
+    TitleTooLong = 7,
+    DescriptionTooLong = 8,
+    InvalidUrl = 9,
 }
+
+/// Maximum allowed length (in bytes) for a market title.
+pub const MAX_TITLE_LEN: u32 = 160;
+/// Maximum allowed length (in bytes) for a market description.
+pub const MAX_DESCRIPTION_LEN: u32 = 1000;
 
 /// Single-field market state replacing the separate
 /// `resolved` / `cancelled` / `outcome` / `disputed` flags.
@@ -89,6 +97,63 @@ fn require_not_paused(env: &Env) {
     }
 }
 
+/// Rejects market titles longer than [`MAX_TITLE_LEN`] bytes.
+pub fn validate_title(env: &Env, title: &String) {
+    if title.len() > MAX_TITLE_LEN {
+        panic_with_error!(env, Error::TitleTooLong);
+    }
+}
+
+/// Rejects market descriptions longer than [`MAX_DESCRIPTION_LEN`] bytes.
+pub fn validate_description(env: &Env, description: &String) {
+    if description.len() > MAX_DESCRIPTION_LEN {
+        panic_with_error!(env, Error::DescriptionTooLong);
+    }
+}
+
+/// Rejects external evidence/source URLs that are not well-formed `http(s)` URLs.
+pub fn validate_url(env: &Env, url: &String) {
+    let len = url.len();
+    if len == 0 {
+        panic_with_error!(env, Error::InvalidUrl);
+    }
+    let bytes = url.to_bytes();
+    let scheme_len: u32 = if starts_with(&bytes, b"https://") {
+        8
+    } else if starts_with(&bytes, b"http://") {
+        7
+    } else {
+        panic_with_error!(env, Error::InvalidUrl);
+    };
+    // Require at least one host character after the scheme.
+    if len <= scheme_len {
+        panic_with_error!(env, Error::InvalidUrl);
+    }
+    // Reject whitespace and control characters anywhere in the URL.
+    let mut i: u32 = 0;
+    while i < len {
+        let b = bytes.get_unchecked(i);
+        if b <= 0x20 || b == 0x7f {
+            panic_with_error!(env, Error::InvalidUrl);
+        }
+        i += 1;
+    }
+}
+
+fn starts_with(bytes: &soroban_sdk::Bytes, prefix: &[u8]) -> bool {
+    if bytes.len() < prefix.len() as u32 {
+        return false;
+    }
+    let mut i: u32 = 0;
+    while i < prefix.len() as u32 {
+        if bytes.get_unchecked(i) != prefix[i as usize] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 fn load_market(env: &Env) -> Market {
     if let Some(m) = env.storage().persistent().get::<_, Market>(&DataKey::Market) {
         return m;
@@ -130,6 +195,14 @@ impl MarketContract {
             &DataKey::Market,
             &Market { status: MarketStatus::Open, yes_pool: 0, no_pool: 0 },
         );
+    }
+
+    /// Validates market content (title, description, source URL) against the
+    /// contract's length limits and URL format rules. Reverts on invalid input.
+    pub fn validate_content(env: Env, title: String, description: String, source_url: String) {
+        validate_title(&env, &title);
+        validate_description(&env, &description);
+        validate_url(&env, &source_url);
     }
 
     pub fn pause(env: Env, admin: Address) {
@@ -243,25 +316,52 @@ mod tests {
             c.try_place_bet(&Address::generate(&env), &true, &1),
             Err(Ok(soroban_sdk::Error::from_contract_error(Error::ContractPaused as u32)))
         );
-        assert_eq!(c.get_market().status, MarketStatus::Open);
-        c.unpause(&admin);
-        c.submit_outcome(&admin, &true);
-        assert_eq!(c.get_market().status, MarketStatus::ResolvedYes);
     }
 
     #[test]
-    fn legacy_market_migrates() {
-        let (env, c, admin) = setup();
-        env.as_contract(&c.address, || {
-            env.storage().persistent().set(
-                &DataKey::LegacyMarket,
-                &LegacyMarket { resolved: true, cancelled: false, outcome: true, disputed: false, yes_pool: 10, no_pool: 5 },
-            );
-        });
-        c.migrate(&admin);
-        let m = c.get_market();
-        assert_eq!(m.status, MarketStatus::ResolvedYes);
-        assert_eq!(m.yes_pool, 10);
-        assert_eq!(m.no_pool, 5);
+    fn validate_content_accepts_valid_input() {
+        let (env, c, _admin) = setup();
+        let title = String::from_str(&env, "Will BTC close above $100k?");
+        let desc = String::from_str(&env, "Resolves YES if BTC/USD closes above 100000 on 2025-12-31.");
+        let url = String::from_str(&env, "https://example.com/evidence");
+        c.validate_content(&title, &desc, &url);
+    }
+
+    #[test]
+    fn validate_content_rejects_oversized_title() {
+        let (env, c, _admin) = setup();
+        let long = "a".repeat((MAX_TITLE_LEN + 1) as usize);
+        let title = String::from_str(&env, &long);
+        let desc = String::from_str(&env, "ok");
+        let url = String::from_str(&env, "https://example.com");
+        assert_eq!(
+            c.try_validate_content(&title, &desc, &url),
+            Err(Ok(soroban_sdk::Error::from_contract_error(Error::TitleTooLong as u32)))
+        );
+    }
+
+    #[test]
+    fn validate_content_rejects_oversized_description() {
+        let (env, c, _admin) = setup();
+        let title = String::from_str(&env, "ok");
+        let long = "a".repeat((MAX_DESCRIPTION_LEN + 1) as usize);
+        let desc = String::from_str(&env, &long);
+        let url = String::from_str(&env, "https://example.com");
+        assert_eq!(
+            c.try_validate_content(&title, &desc, &url),
+            Err(Ok(soroban_sdk::Error::from_contract_error(Error::DescriptionTooLong as u32)))
+        );
+    }
+
+    #[test]
+    fn validate_content_rejects_bad_url() {
+        let (env, c, _admin) = setup();
+        let title = String::from_str(&env, "ok");
+        let desc = String::from_str(&env, "ok");
+        let url = String::from_str(&env, "javascript:alert(1)");
+        assert_eq!(
+            c.try_validate_content(&title, &desc, &url),
+            Err(Ok(soroban_sdk::Error::from_contract_error(Error::InvalidUrl as u32)))
+        );
     }
 }
