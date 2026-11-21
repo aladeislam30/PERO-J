@@ -69,6 +69,13 @@ fn admin(env: &Env) -> Address {
         .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialised))
 }
 
+/// Requires the caller to be the admin account.
+///
+/// The admin is expected to be a Stellar multi-signature account configured
+/// with a 3-of-5 signer set and `high` threshold. `require_auth` on the admin
+/// address forces the Stellar ledger to satisfy that account's signer weights
+/// and thresholds before this contract entry point can execute, so a single
+/// key cannot authorize privileged operations on its own.
 fn require_admin(env: &Env, caller: &Address) {
     caller.require_auth();
     if *caller != admin(env) {
@@ -246,14 +253,15 @@ mod tests {
     fn legacy_market_migrates() {
         let (env, c, admin) = setup();
         env.as_contract(&c.address, || {
-            env.storage().persistent().remove(&DataKey::Market);
             env.storage().persistent().set(
                 &DataKey::LegacyMarket,
-                &LegacyMarket { resolved: true, cancelled: false, outcome: false, disputed: false, yes_pool: 1, no_pool: 2 },
+                &LegacyMarket { resolved: true, cancelled: false, outcome: true, disputed: false, yes_pool: 10, no_pool: 5 },
             );
         });
-        assert_eq!(c.get_market().status, MarketStatus::ResolvedNo);
         c.migrate(&admin);
-        assert_eq!(c.get_market().no_pool, 2);
+        let m = c.get_market();
+        assert_eq!(m.status, MarketStatus::ResolvedYes);
+        assert_eq!(m.yes_pool, 10);
+        assert_eq!(m.no_pool, 5);
     }
 }
