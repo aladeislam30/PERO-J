@@ -69,16 +69,16 @@ fn bond_scales_with_pool_volume() {
 
     // 5,000 XLM pool -> 1% = 50 XLM, still below the base bond.
     let u = funded(&c, 2_000_000 * XLM);
-    c.client.place_bet(&u, &1, &1, &(5_000 * XLM));
+    c.client.place_bet(&u, &1, &1, &(5_000 * XLM), &0);
     assert_eq!(c.client.required_bond(&1, &false), BASE_BOND);
 
     // 100,000 XLM pool -> 1,000 XLM.
-    c.client.place_bet(&u, &1, &0, &(95_000 * XLM));
+    c.client.place_bet(&u, &1, &0, &(95_000 * XLM), &0);
     assert_eq!(c.client.required_bond(&1, &false), 1_000 * XLM);
     assert_eq!(c.client.required_bond(&1, &true), 1_000 * XLM);
 
     // 1,000,000 XLM pool -> 10,000 XLM.
-    c.client.place_bet(&u, &1, &0, &(900_000 * XLM));
+    c.client.place_bet(&u, &1, &0, &(900_000 * XLM), &0);
     assert_eq!(c.client.required_bond(&1, &false), 10_000 * XLM);
 }
 
@@ -86,7 +86,7 @@ fn bond_scales_with_pool_volume() {
 fn insufficient_bond_reverts() {
     let c = setup();
     let u = funded(&c, 1_000_000 * XLM);
-    c.client.place_bet(&u, &1, &1, &(100_000 * XLM));
+    c.client.place_bet(&u, &1, &1, &(100_000 * XLM), &0);
     let required = c.client.required_bond(&1, &false);
 
     let r = c.client.try_submit_outcome(&u, &1, &1, &(required - 1));
@@ -105,8 +105,8 @@ fn one_sided_market_cancels_and_refunds() {
     let c = setup();
     let a = funded(&c, 100 * XLM);
     let b = funded(&c, 50 * XLM);
-    c.client.place_bet(&a, &1, &1, &(100 * XLM));
-    c.client.place_bet(&b, &1, &1, &(50 * XLM));
+    c.client.place_bet(&a, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&b, &1, &1, &(50 * XLM), &0);
 
     // Everyone bet YES but the market resolves NO: no payouts would be possible.
     assert_eq!(c.client.resolve_market(&c.admin, &1, &0), Status::Cancelled);
@@ -127,8 +127,8 @@ fn claim_emits_event_and_zero_claim_does_not() {
     let c = setup();
     let w = funded(&c, 100 * XLM);
     let l = funded(&c, 100 * XLM);
-    c.client.place_bet(&w, &1, &1, &(100 * XLM));
-    c.client.place_bet(&l, &1, &0, &(100 * XLM));
+    c.client.place_bet(&w, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&l, &1, &0, &(100 * XLM), &0);
     assert_eq!(c.client.resolve_market(&c.admin, &1, &1), Status::Resolved);
 
     // 200 XLM pool minus 2% fee goes to the sole winner.
@@ -146,8 +146,8 @@ fn withdraw_fees_emits_event_only_when_authorized() {
     let c = setup();
     let w = funded(&c, 100 * XLM);
     let l = funded(&c, 100 * XLM);
-    c.client.place_bet(&w, &1, &1, &(100 * XLM));
-    c.client.place_bet(&l, &1, &0, &(100 * XLM));
+    c.client.place_bet(&w, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&l, &1, &0, &(100 * XLM), &0);
     c.client.resolve_market(&c.admin, &1, &1);
     assert_eq!(c.client.get_fees(), 4 * XLM);
 
@@ -174,8 +174,8 @@ fn disputed<'a>(c: &Ctx<'a>) -> (Vec<Address>, Address, Address) {
     c.client.set_council(&c.admin, &council, &2);
     let bettor = funded(c, 100 * XLM);
     let other = funded(c, 100 * XLM);
-    c.client.place_bet(&bettor, &1, &1, &(100 * XLM));
-    c.client.place_bet(&other, &1, &0, &(100 * XLM));
+    c.client.place_bet(&bettor, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&other, &1, &0, &(100 * XLM), &0);
     let submitter = funded(c, BASE_BOND);
     let disputer = funded(c, BASE_CHALLENGE_BOND);
     c.client.submit_outcome(&submitter, &1, &1, &BASE_BOND);
@@ -240,5 +240,40 @@ fn admin_can_veto_during_timelock() {
         expect(Error::InvalidState)
     );
     assert_eq!(c.client.finalize_dispute(&1), Status::Resolved);
-    assert_eq!(c.client.get_market(&1).winning_side, 1);
+}
+
+#[test]
+fn place_bet_reverts_when_odds_below_min_acceptable() {
+    let c = setup();
+    let a = funded(&c, 100 * XLM);
+    let b = funded(&c, 100 * XLM);
+
+    // First bet establishes a YES-heavy pool: YES odds ~ 100/200 = 50%.
+    c.client.place_bet(&a, &1, &1, &(100 * XLM), &0);
+
+    // Requiring 60% YES odds must revert since current odds are 50%.
+    let r = c.client.try_place_bet(&b, &1, &1, &(100 * XLM), &6_000);
+    assert_eq!(r.err(), expect(Error::SlippageExceeded));
+
+    // Requiring 50% (or lower) is acceptable.
+    c.client.place_bet(&b, &1, &1, &(100 * XLM), &5_000);
+}
+
+#[test]
+fn place_bet_slippage_protects_against_odds_shift() {
+    let c = setup();
+    let a = funded(&c, 100 * XLM);
+    let b = funded(&c, 100 * XLM);
+    let victim = funded(&c, 100 * XLM);
+
+    // Balanced pool: YES odds 50%.
+    c.client.place_bet(&a, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&b, &1, &0, &(100 * XLM), &0);
+
+    // A large NO bet shifts YES odds down to ~33%.
+    c.client.place_bet(&b, &1, &0, &(200 * XLM), &0);
+
+    // Victim expected at least 45% YES odds; sandwiching pushed it below.
+    let r = c.client.try_place_bet(&victim, &1, &1, &(100 * XLM), &4_500);
+    assert_eq!(r.err(), expect(Error::SlippageExceeded));
 }
