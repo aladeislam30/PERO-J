@@ -220,47 +220,66 @@ export async function probeOracle(cfg, fetchImpl = fetch) {
     const body = res.body && typeof res.body === "object" ? res.body : {};
     const details = {
       activeResolvers: body.active_resolvers ?? body.activeResolvers ?? null,
-      pendingProposals: body.pending_proposals ?? body.pendingProposals ?? null,
-      activeDisputes: body.active_disputes ?? body.activeDisputes ?? null,
+      pendingProposals: body.pending_proposals ?? null,
+      lastResolvedAt: body.last_resolved_at ?? null,
     };
-    if (!res.ok || body.status === "error") {
+
+    if (!res.ok) {
       return result(base, { status: STATUS.MAJOR_OUTAGE, latencyMs: res.latencyMs, message: `Oracle returned HTTP ${res.status}`, details });
     }
-    if (body.status === "degraded" || details.activeResolvers === 0) {
+    if (body.status === "down" || body.status === "unhealthy") {
+      return result(base, { status: STATUS.MAJOR_OUTAGE, latencyMs: res.latencyMs, message: "Oracle resolvers are down", details });
+    }
+    if (body.status === "degraded") {
       return result(base, { status: STATUS.DEGRADED, latencyMs: res.latencyMs, message: "Oracle resolvers degraded", details });
     }
-    return result(base, { status: latencyStatus(res.latencyMs, cfg), latencyMs: res.latencyMs, message: "Resolvers healthy", details });
-  } catch (err) {
-    return failure(base, err);
-  }
-}
-
-/** Public backend REST API. */
-export async function probeApi(cfg, fetchImpl = fetch) {
-  const base = {
-    id: "api",
-    name: "Backend REST API",
-    description: "Public REST endpoints consumed by the web app and integrators.",
-  };
-  try {
-    const res = await timedFetch(`${cfg.apiUrl.replace(/\/$/, "")}/ready`, { timeoutMs: cfg.probeTimeoutMs, fetchImpl });
-    if (!res.ok) {
-      return result(base, { status: STATUS.MAJOR_OUTAGE, latencyMs: res.latencyMs, message: `API returned HTTP ${res.status}` });
-    }
-    const status = latencyStatus(res.latencyMs, cfg);
     return result(base, {
-      status,
+      status: latencyStatus(res.latencyMs, cfg),
       latencyMs: res.latencyMs,
-      message: status === STATUS.OPERATIONAL ? "Responding normally" : `Elevated latency (${res.latencyMs}ms)`,
+      message: "Resolvers online",
+      details,
     });
   } catch (err) {
     return failure(base, err);
   }
 }
 
-export const PROBES = [probeStellar, probeIndexer, probeOracle, probeApi];
+/** Backend REST API. */
+export async function probeApi(cfg, fetchImpl = fetch) {
+  const base = {
+    id: "api",
+    name: "Backend REST API",
+    description: "Serves markets, positions, and account data to clients.",
+  };
+  try {
+    const res = await timedFetch(`${cfg.apiUrl.replace(/\/$/, "")}/health`, { timeoutMs: cfg.probeTimeoutMs, fetchImpl });
+    const body = res.body && typeof res.body === "object" ? res.body : {};
+    const details = { httpStatus: res.status, db: body.db ?? null };
 
-/** Run every probe concurrently. */
+    if (!res.ok) {
+      return result(base, { status: STATUS.MAJOR_OUTAGE, latencyMs: res.latencyMs, message: `API returned HTTP ${res.status}`, details });
+    }
+    if (body.db === "disconnected") {
+      return result(base, { status: STATUS.DEGRADED, latencyMs: res.latencyMs, message: "API database disconnected", details });
+    }
+    return result(base, {
+      status: latencyStatus(res.latencyMs, cfg),
+      latencyMs: res.latencyMs,
+      message: "API responding",
+      details,
+    });
+  } catch (err) {
+    return failure(base, err);
+  }
+}
+
+/** Run every probe concurrently and return the full component snapshot. */
 export async function runAllProbes(cfg, fetchImpl = fetch) {
-  return Promise.all(PROBES.map((probe) => probe(cfg, fetchImpl)));
+  const probes = [probeStellar, probeIndexer, probeOracle, probeApi];
+  const components = await Promise.all(probes.map((probe) => probe(cfg, fetchImpl)));
+  return {
+    status: worstStatus(components.map((c) => c.status)),
+    components,
+    checkedAt: new Date().toISOString(),
+  };
 }

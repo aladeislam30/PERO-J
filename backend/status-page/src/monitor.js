@@ -62,12 +62,25 @@ export class StatusMonitor {
     return Math.round((up / known.length) * 10_000) / 100;
   }
 
+  /**
+   * Average latency (ms) over the recent history window, ignoring samples
+   * where the probe could not measure a latency (e.g. hard failures).
+   */
+  avgLatency(id) {
+    const h = this.history.get(id) ?? [];
+    const samples = h.map((s) => s.latencyMs).filter((v) => typeof v === "number" && Number.isFinite(v));
+    if (!samples.length) return null;
+    const sum = samples.reduce((a, b) => a + b, 0);
+    return Math.round(sum / samples.length);
+  }
+
   snapshot() {
     const components = [...this.latest.values()].map((c) => {
       const h = this.history.get(c.id) ?? [];
       return {
         ...c,
         uptimePercent: this.uptime(c.id),
+        avgLatencyMs: this.avgLatency(c.id),
         latencyHistory: h.slice(-60).map((s) => ({ t: new Date(s.t).toISOString(), latencyMs: s.latencyMs, status: s.status })),
       };
     });
