@@ -530,3 +530,6 @@ PRs welcome. Please open an issue first for large changes.
 - [REST API Reference](docs/rest-api.md)
 - [Register Contract Guide](docs/register-contract.md)
 - [Bonds, Challenge Windows & Slashing Rules](docs/bonds-challenge-slashing.md)
+
+<!-- handsoff-issue-1200 -->
+- #1200: feat(monitoring): implement Grafana dashboards for pipeline health, oracle states, and business KPIs
