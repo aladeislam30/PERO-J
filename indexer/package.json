@@ -9,6 +9,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "migrate": "node src/migrate.js",
+    "migrate:status": "node scripts/migrate-status.js",
     "test": "node --test 'test/*.test.js'",
     "lint": "eslint src/",
     "format": "prettier --write src/",
