@@ -30,6 +30,7 @@ services:
       PORT: 3001
       SAC_ASSETS: "[]"
       EXPLORER_CONTRACT_ID: ""
+      FRONTEND_URL: http://localhost:5173
     ports:
       - "3001:3001"
     depends_on:

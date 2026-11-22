@@ -78,3 +78,25 @@ export const api = {
   wallet:           (address: string, page: number = 1)   => get<WalletEventsResponse>(`/wallet/${address}?page=${page}`),
   registerContract: (meta: ContractMeta)                  => post<{ ok: boolean }>("/contracts", meta),
 };
+
+export interface ReferralParams {
+  name: string;
+  earnings: string;
+  ref: string;
+}
+
+function referralUrl(path: string, params: ReferralParams): string {
+  const url = new URL(`${BASE.replace(/\/$/, "")}${path}`, window.location.origin);
+  url.searchParams.set("name", params.name);
+  url.searchParams.set("earnings", params.earnings);
+  url.searchParams.set("ref", params.ref);
+  return url.toString();
+}
+
+export function referralShareUrl(params: ReferralParams): string {
+  return referralUrl("/og/referral", params);
+}
+
+export function referralImageUrl(params: ReferralParams): string {
+  return referralUrl("/og/referral.png", params);
+}

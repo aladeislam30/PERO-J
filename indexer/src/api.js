@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
+import { renderReferralCard, renderReferralMeta, sanitizeReferralField } from "./referralCard.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -162,6 +163,35 @@ export function startApi() {
       res.json({ contract_id: contractId, window: "24h", ...volume });
     })
   );
+
+  app.get("/api/og/referral.png", (req, res) => {
+    const name = sanitizeReferralField(req.query.name, 40, "FRIEND");
+    const earnings = sanitizeReferralField(req.query.earnings, 24, "0");
+    const ref = sanitizeReferralField(req.query.ref, 80, "IPREDICT");
+    res.set("Cache-Control", "public, max-age=300");
+    res.type("png").send(renderReferralCard({ name, earnings, ref }));
+  });
+
+  app.get("/api/og/referral", (req, res) => {
+    const name = sanitizeReferralField(req.query.name, 40, "A friend");
+    const earnings = sanitizeReferralField(req.query.earnings, 24, "0");
+    const ref = sanitizeReferralField(req.query.ref, 80, "ipredict");
+    const origin = `${req.protocol}://${req.get("host") || "localhost:3001"}`;
+    const appOrigin = process.env.FRONTEND_URL || origin;
+    const appUrl = new URL("/referrals", appOrigin);
+    appUrl.searchParams.set("ref", ref);
+    const imageUrl = new URL("/api/og/referral.png", origin);
+    imageUrl.search = new URLSearchParams({ name, earnings, ref }).toString();
+    res.type("html").send(
+      renderReferralMeta({
+        name,
+        earnings,
+        ref,
+        appUrl: appUrl.toString(),
+        imageUrl: imageUrl.toString(),
+      })
+    );
+  });
 
   app.use((req, res) => {
     res.status(404).json({ error: "Not found" });

@@ -46,6 +46,16 @@ export default function Nav() {
         />
         <button type="submit">Search</button>
       </form>
+      <NavLink
+        to="/referrals"
+        style={({ isActive }) => ({
+          color: isActive ? "var(--accent)" : "var(--text)",
+          fontWeight: isActive ? 700 : 500,
+          whiteSpace: "nowrap",
+        })}
+      >
+        Referrals
+      </NavLink>
     </header>
   );
 }
