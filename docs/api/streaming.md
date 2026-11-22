@@ -26,3 +26,16 @@ an in-memory implementation is provided for tests.
 - WebSocket server: needs the `ws` dependency, which is not in
   `indexer/package.json` (it cannot be added without updating the lockfile).
 - Wiring ledger/bet event processing to call `publish`.
+
+## Pub/sub details
+
+`startMarketPubSub(subscriber)` subscribes to `stellar:markets:updates`, parses
+JSON messages (those without a `marketId` or invalid JSON are dropped with a
+warning) and calls `marketHub.publish`. It re-subscribes on the subscriber's
+`ready` event after reconnects, and `stop()` removes listeners and unsubscribes.
+Producers call `publishMarketUpdate(publisher, event)`, which never throws.
+
+The call `startMarketPubSub(<ioredis subscriber>)` is not yet made in
+`api.js`/`index.js` because `ioredis` is not listed in `indexer/package.json`
+(existing `src/redis.js` imports it anyway). Add the dependency (with lockfile)
+and call it at startup with a dedicated subscriber connection.
