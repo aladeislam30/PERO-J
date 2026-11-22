@@ -279,6 +279,8 @@ export function streamEvents(
 
 
 export interface MarketUpdate {
+  marketId?: string;
+  market_id?: string;
   contractId?: string;
   type: string;
   data?: Record<string, unknown>;
@@ -290,12 +292,12 @@ export interface MarketUpdate {
  * Eliminates 3-5s polling latency and saves bandwidth on static markets.
  */
 export function streamMarketUpdates(
-  contractId: string | undefined,
+  marketId: string | undefined,
   onUpdate: (update: MarketUpdate) => void,
   onError?: (err: Event) => void
 ): () => void {
-  const q = contractId ? `?contract=${encodeURIComponent(contractId)}` : "";
-  const url = `${BASE}/markets/stream${q}`;
+  const q = marketId ? `?market_id=${encodeURIComponent(marketId)}` : "";
+  const url = `${BASE}/v1/markets/stream${q}`;
   const eventSource = new EventSource(url);
 
   eventSource.onmessage = (e) => {

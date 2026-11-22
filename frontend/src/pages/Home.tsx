@@ -5,6 +5,7 @@ import { api } from "../api";
 import EventTable from "../components/EventTable";
 import MarketCard from "../components/MarketCard";
 import Skeleton, { SkeletonBar } from "../components/Skeleton";
+import { useMarketLiveUpdates } from "../hooks/useMarketLiveUpdates";
 
 export default function Home() {
   const [fnFilter, setFnFilter] = useState("");
@@ -36,6 +37,8 @@ export default function Home() {
     queryKey: ["markets", "home"],
     queryFn: () => api.markets({ limit: 6 }),
   });
+  const { updates: marketUpdates, connected: marketsConnected, error: marketsStreamError } =
+    useMarketLiveUpdates();
 
   const effectiveFn = customFn || fnFilter || undefined;
 
@@ -80,6 +83,9 @@ export default function Home() {
           <h2 id="markets-heading" style={{ fontSize: 18 }}>Markets</h2>
           <Link to="/markets">Browse all markets</Link>
         </div>
+        <p aria-live="polite" style={{ color: marketsStreamError ? "var(--red, #cf222e)" : "var(--muted)", fontSize: 12 }}>
+          {marketsStreamError ?? (marketsConnected ? "Live market updates connected" : "Connecting to live market updates…")}
+        </p>
         {marketsError ? (
           <p role="alert" style={{ color: "var(--red, #cf222e)" }}>
             Could not load markets: {marketsQueryError instanceof Error ? marketsQueryError.message : "Unknown error"}
@@ -90,7 +96,9 @@ export default function Home() {
           <p style={{ color: "var(--muted)" }}>No markets have been indexed yet.</p>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-            {marketsData?.markets.map((market) => <MarketCard key={market.id} market={market} />)}
+            {marketsData?.markets.map((market) => (
+              <MarketCard key={market.id} market={market} update={marketUpdates[market.id]} />
+            ))}
           </div>
         )}
       </section>

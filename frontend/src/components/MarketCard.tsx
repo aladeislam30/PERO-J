@@ -1,5 +1,5 @@
-import type { CSSProperties } from "react";
-import type { Market } from "../api";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import type { Market, MarketUpdate } from "../api";
 
 type OracleStatus = {
   label: string;
@@ -110,22 +110,98 @@ export function MarketOracleBadge({ state }: { state?: string | null }) {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function AnimatedOdds({ label, value }: { label: string; value: number }) {
+  const previous = useRef(value);
+  const [direction, setDirection] = useState<"up" | "down" | null>(null);
+
+  useEffect(() => {
+    if (previous.current !== value) {
+      setDirection(value > previous.current ? "up" : "down");
+      previous.current = value;
+    }
+
+    const timer = window.setTimeout(() => setDirection(null), 700);
+    return () => window.clearTimeout(timer);
+  }, [value]);
+
+  return (
+    <span
+      style={{
+        color: direction === "up" ? "#1a7f37" : direction === "down" ? "#cf222e" : "inherit",
+        transition: "color 600ms ease",
+      }}
+    >
+      {label}: {value.toFixed(4)}
+    </span>
+  );
+}
+
+function LiveMarketData({ update }: { update?: MarketUpdate }) {
+  if (!update?.data) return null;
+
+  const data = update.data;
+  const marketData = isRecord(data.market) ? data.market : {};
+  const rawOdds = isRecord(data.odds)
+    ? data.odds
+    : isRecord(marketData.odds)
+      ? marketData.odds
+      : {};
+  const odds = Object.entries(rawOdds).filter(
+    (entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]),
+  );
+  const totalPool = data.total_pool ?? data.totalPool ?? marketData.total_pool ?? marketData.totalPool;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
+      {update.type === "bet_placed" && (
+        <p aria-live="polite" style={{ color: "var(--muted)" }}>A new bet was received.</p>
+      )}
+      {totalPool !== undefined && (
+        <p>Pool balance: {String(totalPool)}</p>
+      )}
+      {odds.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {odds.map(([outcome, value]) => (
+            <AnimatedOdds key={outcome} label={`${outcome} odds`} value={value} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function truncateId(id: string) {
   return id.length > 24 ? `${id.slice(0, 12)}…${id.slice(-8)}` : id;
 }
 
-export default function MarketCard({ market }: { market: Market }) {
+export default function MarketCard({
+  market,
+  update,
+}: {
+  market: Market;
+  update?: MarketUpdate;
+}) {
+  const liveOracleState =
+    typeof update?.data?.oracle_state === "string"
+      ? update.data.oracle_state
+      : market.oracle_state;
+
   return (
     <article className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <h3 style={{ fontSize: 15, overflowWrap: "anywhere" }}>{market.id}</h3>
-        <MarketOracleBadge state={market.oracle_state} />
+        <MarketOracleBadge state={liveOracleState} />
       </div>
-      {market.outcome && (
+      {(typeof update?.data?.outcome === "string" ? update.data.outcome : market.outcome) && (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>
-          Proposed outcome: {market.outcome}
+          Proposed outcome: {typeof update?.data?.outcome === "string" ? update.data.outcome : market.outcome}
         </p>
       )}
+      <LiveMarketData update={update} />
       <div style={{ color: "var(--muted)", fontSize: 12 }}>
         Contract: <code title={market.contract_id}>{truncateId(market.contract_id)}</code>
       </div>
