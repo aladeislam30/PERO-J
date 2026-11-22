@@ -47,6 +47,23 @@ export interface ContractsResponse {
   limit: number;
 }
 
+export interface Market {
+  id: string;
+  contract_id: string;
+  oracle_state?: string | null;
+  outcome?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MarketsResponse {
+  markets: Market[];
+  total: number;
+  page: number;
+  limit: number;
+  next_cursor: string | null;
+}
+
 export interface ProposedOutcome {
   id: string;
   contract_id: string;
@@ -315,6 +332,13 @@ export const api = {
     if (params.page)    q.set("page", String(params.page));
     if (params.limit)   q.set("limit", String(params.limit));
     return get<ContractsResponse>(`/contracts?${q}`);
+  },
+  markets:           (params: { page?: number; limit?: number; cursor?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page)    q.set("page", String(params.page));
+    if (params.limit)   q.set("limit", String(params.limit));
+    if (params.cursor)  q.set("cursor", params.cursor);
+    return get<MarketsResponse>(`/markets?${q}`);
   },
   contract:         (id: string)                          => get<ContractMeta>(`/contracts/${id}`),
   wallet:           (address: string, page: number = 1)   => get<WalletEventsResponse>(`/wallet/${address}?page=${page}`),
