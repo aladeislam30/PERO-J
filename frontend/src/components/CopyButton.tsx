@@ -28,7 +28,7 @@ export default function CopyButton({ value, size = "normal" }: CopyButtonProps) 
         minWidth: "auto",
         borderRadius: "4px",
         background: copied ? "var(--green)" : "var(--muted)",
-        color: "#fff",
+        color: copied ? "var(--on-success)" : "var(--on-muted)",
       }}
       title="Copy to clipboard"
     >

@@ -13,7 +13,7 @@ export default function NotFound() {
           display: "inline-block",
           padding: "10px 20px",
           background: "var(--accent)",
-          color: "#0d1117",
+          color: "var(--accent-contrast)",
           borderRadius: "6px",
           textDecoration: "none",
           fontWeight: 600,

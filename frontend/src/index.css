@@ -1,61 +1,94 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #ffffff;
-  --surface: #f6f8fa;
-  --border: #d0d7de;
-  --accent: #0969da;
-  --text: #24292f;
-  --muted: #57606a;
-  --green: #1a7f37;
-  --yellow: #9a6700;
+  --bg-primary: #ffffff;
+  --surface-primary: #f6f8fa;
+  --text-primary: #24292f;
+  --text-muted: #57606a;
+  --border-color: #d0d7de;
+  --accent-color: #0969da;
+  --accent-contrast: #ffffff;
+  --success-color: #1a7f37;
+  --warning-color: #9a6700;
+  --success-bg: #dafbe1;
+  --warning-bg: #fff8c5;
+  --on-success: #ffffff;
+  --on-muted: #ffffff;
+
+  --bg: var(--bg-primary);
+  --surface: var(--surface-primary);
+  --border: var(--border-color);
+  --accent: var(--accent-color);
+  --text: var(--text-primary);
+  --muted: var(--text-muted);
+  --green: var(--success-color);
+  --yellow: var(--warning-color);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --accent: #58a6ff;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --green: #3fb950;
-    --yellow: #d29922;
-  }
+:root[data-theme="dark"] {
+  --bg-primary: #0d1117;
+  --surface-primary: #161b22;
+  --text-primary: #e6edf3;
+  --text-muted: #8b949e;
+  --border-color: #30363d;
+  --accent-color: #58a6ff;
+  --accent-contrast: #0d1117;
+  --success-color: #3fb950;
+  --warning-color: #d29922;
+  --success-bg: #1a3a22;
+  --warning-bg: #3a2e0a;
+  --on-success: #0d1117;
+  --on-muted: #0d1117;
 }
 
-body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 14px; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
 
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--accent-color); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 input, select {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 14px;
   outline: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
-input:focus, select:focus { border-color: var(--accent); }
+input:focus, select:focus { border-color: var(--accent-color); }
+input[type="radio"], input[type="checkbox"], input[type="range"] { width: auto; padding: 0; }
+input[type="radio"], input[type="checkbox"] { accent-color: var(--accent-color); }
+input[type="range"] { accent-color: var(--accent-color); }
 
 button {
-  background: var(--accent);
-  color: #0d1117;
-  border: none;
+  background: var(--accent-color);
+  color: var(--accent-contrast);
+  border: 1px solid transparent;
   border-radius: 6px;
   padding: 6px 14px;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   border-radius: 8px;
   padding: 16px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .badge {
@@ -64,31 +97,38 @@ button:hover { opacity: 0.85; }
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  background: var(--border);
-  color: var(--text);
+  background: var(--border-color);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
-.badge.green { background: #1a3a22; color: var(--green); }
-.badge.yellow { background: #3a2e0a; color: var(--yellow); }
+.badge.green { background: var(--success-bg); color: var(--success-color); }
+.badge.yellow { background: var(--warning-bg); color: var(--warning-color); }
+
+@media (prefers-reduced-motion: reduce) {
+  body, a, input, select, button, .card, .badge { transition: none; }
+}
 
 /* Mobile responsive styles */
 @media (max-width: 600px) {
   body { font-size: 13px; }
-  
+
   input, select {
     width: 100%;
     padding: 8px 10px;
     font-size: 13px;
   }
-  
+
+  input[type="radio"], input[type="checkbox"], input[type="range"] { width: auto; }
+
   button {
     padding: 8px 12px;
     font-size: 13px;
   }
-  
+
   .card {
     padding: 12px;
   }
-  
+
   /* Hide secondary table columns on mobile */
   table th:nth-child(1),
   table td:nth-child(1),
