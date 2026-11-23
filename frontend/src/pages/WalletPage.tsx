@@ -148,6 +148,16 @@ export default function WalletPage() {
 
   const events = data?.events ?? [];
   const total = data?.total ?? 0;
+
+  // Escape key handler for wallet selector modal
+  useEffect(() => {
+    if (!selectorOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectorOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectorOpen]);
   const limit = data?.limit ?? 25;
 
   const { pendingBets } = useBets();
@@ -223,13 +233,13 @@ export default function WalletPage() {
       {/* Pagination */}
       {isValidAddress && (
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
+          <button disabled={page === 1} onClick={() => setPage(p => p - 1)} aria-label="Previous page">← Prev</button>
           <span style={{ padding: "6px 10px", color: "var(--muted)" }}>Page {page}</span>
           {/* Disable Next only when all events have been fetched.
               Checking page * limit >= total (not events.length < limit)
               avoids prematurely disabling the button when the last page
               is exactly full (total % limit === 0). */}
-          <button disabled={page * limit >= total} onClick={() => setPage(p => p + 1)}>Next →</button>
+          <button disabled={page * limit >= total} onClick={() => setPage(p => p + 1)} aria-label="Next page">Next →</button>
         </div>
       )}
 
@@ -256,7 +266,7 @@ export default function WalletPage() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h3 style={{ margin: 0 }}>Connect a Wallet</h3>
-              <button type="button" onClick={() => setSelectorOpen(false)} aria-label="Close">✕</button>
+              <button type="button" onClick={() => setSelectorOpen(false)} aria-label="Close wallet selection">✕</button>
             </div>
             {walletError && (
               <p style={{ color: "var(--danger, #e5484d)", fontSize: 12, margin: 0 }}>{walletError}</p>
