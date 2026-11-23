@@ -36,3 +36,28 @@ launch-by-ID endpoint by default.
   launches remain pending.
 
 Sample election, NOAA, and launch payloads are in `test/fixtures/`.
+
+## Daemon
+
+`npm start` runs the auto-submitter daemon. The daemon uses TypeScript modules,
+so start it through `npm start` (tsx) rather than `node src/daemon.js` on Node 20.
+`npm run typecheck` and `npm test` verify the package.
+
+### Council inactivity monitor
+
+Every hour the daemon reads `get_active_disputes` from the oracle contract and
+counts distinct votes from current council members. A dispute without quorum
+pages the council at 24h, 48h (`warning`) and 60h (`critical`) of its 72-hour
+voting period. Incidents resolve when quorum is reached or the dispute closes,
+and failed notifications are retried on the next check.
+
+| Variable | Purpose |
+| --- | --- |
+| `ORACLE_CONTRACT_ID` | Oracle contract holding the disputes (required) |
+| `PAGERDUTY_ROUTING_KEY` | Events API v2 key of a service that escalates to the council (required) |
+| `ORACLE_COUNCIL_ROSTER` | Comma-separated council addresses (required) |
+| `ORACLE_COUNCIL_QUORUM` | Votes required; defaults to a strict majority |
+
+Notification state is kept in memory. After a restart the current milestone is
+re-sent under the same deduplication key; an incident whose dispute closed while
+the daemon was down must be resolved manually.

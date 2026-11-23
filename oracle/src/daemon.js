@@ -1,5 +1,9 @@
 import http from "node:http";
 import pg from "pg";
+import {
+  getCouncilInactivityConfig,
+  startCouncilInactivityMonitor,
+} from "./monitors/council-inactivity.ts";
 import { submitExpiredMarket } from "./workers/auto-submitter.js";
 
 const POLL_MS = Number(process.env.ORACLE_POLL_MS) || 15_000;
@@ -36,6 +40,16 @@ export async function pollOnce(db = pool, submit = submitExpiredMarket) {
 async function run() {
   let stopping = false;
   let timer;
+
+  const councilConfig = getCouncilInactivityConfig();
+  const stopCouncilMonitor = councilConfig
+    ? startCouncilInactivityMonitor({ config: councilConfig })
+    : null;
+  if (!councilConfig) {
+    console.warn(
+      "[council-inactivity] disabled: set ORACLE_CONTRACT_ID, PAGERDUTY_ROUTING_KEY and ORACLE_COUNCIL_ROSTER",
+    );
+  }
 
   const loop = async () => {
     try {
@@ -77,6 +91,7 @@ async function run() {
     console.log(`[oracle] ${signal} received, shutting down`);
     clearTimeout(timer);
     clearInterval(heartbeat);
+    stopCouncilMonitor?.();
     server.close();
     await pool.end();
     process.exit(0);
