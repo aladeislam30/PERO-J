@@ -72,6 +72,9 @@ export default function Nav() {
           ☰
         </button>
         <nav className={`nav-links${menuOpen ? " open" : ""}`}>
+          <NavLink to="/profile" onClick={() => setMenuOpen(false)} style={({ isActive }) => linkStyle(isActive)}>
+            Profile
+          </NavLink>
           <NavLink to="/contracts" onClick={() => setMenuOpen(false)} style={({ isActive }) => linkStyle(isActive)}>
             Contracts
           </NavLink>
