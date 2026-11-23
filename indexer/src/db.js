@@ -1162,6 +1162,22 @@ export const db = {
   },
 
   /**
+   * List oracle submissions, optionally filtered by status.
+   * @param {{status?: string, limit?: number}} opts
+   * @returns {Promise<object[]>}
+   */
+  async getOracleSubmissions({ status = null, limit = 50 } = {}) {
+    const { rows } = await pool.query(
+      `SELECT * FROM oracle_submissions
+       WHERE ($1::text IS NULL OR status = $1)
+       ORDER BY created_at DESC, id DESC
+       LIMIT $2`,
+      [status, limit]
+    );
+    return rows;
+  },
+
+  /**
    * Insert an oracle dispute record.
    * Uses pool.query — safe to call outside of init().
    *
