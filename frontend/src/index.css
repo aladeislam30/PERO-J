@@ -194,6 +194,39 @@ button:hover { opacity: 0.85; }
   background: var(--accent);
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.challenge-modal {
+  width: 100%;
+  max-width: 460px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+.challenge-countdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--yellow);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.challenge-countdown span { color: var(--muted); font-size: 13px; }
+.challenge-countdown strong { font-size: 28px; font-variant-numeric: tabular-nums; color: var(--yellow); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* Mobile responsive styles */
 @media (max-width: 600px) {
   body { font-size: 13px; }

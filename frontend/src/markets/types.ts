@@ -5,6 +5,8 @@ export interface Market {
   title: string;
   oracleState: OracleState;
   challengeDeadline: string;
+  challengeBondXlm?: number;
+  challengeRewardXlm?: number;
   outcome?: string;
   finalizedTxHash?: string;
   finalizedLedger?: number;

@@ -19,5 +19,7 @@ export const markets: Market[] = [
     title: "Will the next ledger confirm within 10 seconds?",
     oracleState: "submitted",
     challengeDeadline: import.meta.env.VITE_MARKET_CHALLENGE_DEADLINE || "2026-11-01T00:00:00.000Z",
+    challengeBondXlm: 300,
+    challengeRewardXlm: 60,
   },
 ];
