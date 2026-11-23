@@ -6,6 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "audit:bonds": "tsx scripts/audit-bonds.ts",
     "start": "tsx src/daemon.js",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts"

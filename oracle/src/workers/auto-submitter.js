@@ -63,12 +63,13 @@ export async function submitOutcomeOnChain(marketId, outcome) {
  *
  * @param {{ query: Function }} db
  * @param {{ id: string, category: string, params: object }} market
- * @param {{ determine?: Function, submit?: Function }} [deps]
+ * @param {{ determine?: Function, submit?: Function, canResolve?: () => Promise<boolean> }} [deps]
  * @returns {Promise<boolean>} true when an outcome was submitted
  */
 export async function submitExpiredMarket(db, market, deps = {}) {
   const determine = deps.determine ?? determineOutcome;
   const submit = deps.submit ?? submitOutcomeOnChain;
+  const canResolve = deps.canResolve ?? (async () => true);
 
   const claim = await db.query(
     "UPDATE markets SET status = 'submitting' WHERE id = $1 AND status = 'open' RETURNING id",
@@ -80,6 +81,10 @@ export async function submitExpiredMarket(db, market, deps = {}) {
 
   try {
     const outcome = await determine(market);
+    // Re-checked here because fetching the outcome can take several seconds.
+    if (!(await canResolve())) {
+      throw new Error("automated resolution halted by bond escrow audit");
+    }
     await submit(market.id, outcome);
     await db.query("UPDATE markets SET status = 'submitted' WHERE id = $1", [
       market.id,
