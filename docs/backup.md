@@ -1,207 +1,233 @@
-# Database Backup & Restore
+# PostgreSQL Backup & Point-in-Time Recovery (PITR)
 
-> **Tranche 3 — Requirement 3.2:** *"PostgreSQL hosted with daily backups"*
+Automated backups protect all decoded event history and registered ABI metadata
+stored in PostgreSQL.  Two complementary mechanisms provide full PITR coverage:
 
----
+| Mechanism | What it captures | RPO | Tooling |
+|-----------|-----------------|-----|---------|
+| Nightly base backup (`scripts/backup.sh`) | Full database snapshot | ≤ 24 h | `pg_dump` → local + S3 |
+| Continuous WAL archiving | Every committed transaction | ≤ 5 min | `archive_command` → S3 |
 
-## Overview
-
-All decoded event history and registered ABI metadata is stored in PostgreSQL.
-Without a backup strategy, this data is permanently lost on database failure.
-
-This document covers:
-- Automated backup script (`scripts/backup.sh`)
-- Cron job setup for daily backups
-- Restore procedure
-- Cloud deployment considerations (RDS / Cloud SQL)
+**RTO target:** ≤ 1 hour for a full restore on typical indexer database sizes
+(< 50 GB) on a standard cloud VM.
 
 ---
 
-## Backup Script
+## Configuration
 
-### Location
+All settings are read from environment variables (see `.env.example`):
 
-[`scripts/backup.sh`](../scripts/backup.sh)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PGHOST` | `localhost` | Database host |
+| `PGPORT` | `5432` | Database port |
+| `PGUSER` | `postgres` | Database user |
+| `PGPASSWORD` | _(unset)_ | Database password |
+| `PGDATABASE` | `soroban_explorer` | Database name |
+| `BACKUP_DIR` | `./backups` | Directory where local dumps are written |
+| `RETENTION_DAYS` | `7` | Delete local dumps older than this many days |
+| `BACKUP_S3_BUCKET` | _(unset)_ | S3 bucket for remote upload; upload is skipped when empty |
+| `BACKUP_S3_PREFIX` | `postgres-backups` | Key prefix inside the bucket |
+| `BACKUP_S3_REGION` | `us-east-1` | AWS region for the bucket |
 
-### What it does
+`DATABASE_URL` is parsed automatically when the individual `PG*` variables are
+not explicitly set.
 
-1. Runs `pg_dump` with `--clean` and `--no-owner` against the configured database
-2. Compresses the output with `gzip`
-3. Saves to a timestamped file: `soroban_explorer_YYYYMMDD_HHMMSS.sql.gz`
-4. Removes backups older than the configured retention period (default: 7 days)
+---
 
-### Usage
+## Running a base backup
 
 ```bash
-# Default: reads DATABASE_URL from environment, saves to ./backups/
-./scripts/backup.sh
-
-# Explicit connection + custom backup directory
-DATABASE_URL="postgres://user:password@localhost:5432/soroban_explorer" \
-BACKUP_DIR="/mnt/backups" \
-RETENTION_DAYS=14 \
 ./scripts/backup.sh
 ```
 
-### Environment variables
+The script:
+1. Creates `${BACKUP_DIR}/${PGDATABASE}_<UTC-timestamp>.dump` in custom format
+   (`-Fc`) for efficient selective restore via `pg_restore`.
+2. Validates the dump is larger than 512 bytes.
+3. Uploads the dump to S3 with **SSE-KMS** encryption if `BACKUP_S3_BUCKET` is
+   set (requires the AWS CLI and valid credentials or an IAM role).
+4. Prunes local dumps older than `RETENTION_DAYS`.
 
-| Variable         | Default                                              | Description                         |
-|------------------|------------------------------------------------------|-------------------------------------|
-| `DATABASE_URL`   | `postgres://user:password@localhost:5432/soroban_explorer` | PostgreSQL connection string  |
-| `BACKUP_DIR`     | `./backups/`                                         | Directory to store backup files     |
-| `RETENTION_DAYS` | `7`                                                  | Number of days to keep backups      |
+### S3 upload
+
+Set the S3 environment variables and run the script normally:
+
+```bash
+export BACKUP_S3_BUCKET=my-backup-bucket
+export BACKUP_S3_REGION=us-east-1
+./scripts/backup.sh
+```
+
+The upload uses `--sse aws:kms --storage-class STANDARD_IA` for cost-efficient
+encrypted at-rest storage.  Ensure the IAM role or user has at minimum:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
+  "Resource": [
+    "arn:aws:s3:::my-backup-bucket",
+    "arn:aws:s3:::my-backup-bucket/postgres-backups/*"
+  ]
+}
+```
 
 ---
 
-## Automated Daily Backup (Cron)
+## Cron job
 
-Add the following line to the `postgres` user's crontab (or any user with
-read access to the database and write access to `BACKUP_DIR`):
+Schedule a daily backup at 02:00 UTC:
 
 ```cron
-0 2 * * * /path/to/PERO-J/scripts/backup.sh >> /var/log/backup.log 2>&1
-```
-
-This runs the backup every day at 02:00 and appends output to `/var/log/backup.log`.
-
-### One-time setup
-
-```bash
-# Make the script executable
-chmod +x scripts/backup.sh
-
-# Create the log file
-sudo touch /var/log/backup.log
-sudo chown "$USER": /var/log/backup.log
-
-# Add the cron job
-crontab -e
-# → paste: 0 2 * * * /path/to/PERO-J/scripts/backup.sh >> /var/log/backup.log 2>&1
+0 2 * * * cd /path/to/repo && ./scripts/backup.sh >> /var/log/pg-backup.log 2>&1
 ```
 
 ---
 
-## Restore Procedure
+## WAL archiving (continuous PITR)
 
-### Restore from a local backup file
+WAL archiving ships every completed WAL segment to remote storage shortly after
+it is filled, cutting RPO from 24 hours to the WAL rotation interval
+(typically 1–5 minutes under normal write load).
 
-```bash
-# Decompress and restore
-gunzip -c backups/soroban_explorer_20250301_020000.sql.gz | psql "$DATABASE_URL"
+### 1. Enable archiving in `postgresql.conf`
+
+```ini
+wal_level = replica
+archive_mode = on
+archive_command = 'aws s3 cp %p s3://${BACKUP_S3_BUCKET}/wal/%f \
+  --region ${BACKUP_S3_REGION} \
+  --sse aws:kms \
+  --no-progress && echo "archived %f"'
+archive_timeout = 300   # force a segment every 5 min even on quiet servers
 ```
 
-### Restore the latest backup
+Reload PostgreSQL after changing these settings:
 
 ```bash
-LATEST=$(ls -t backups/soroban_explorer_*.sql.gz | head -1)
-echo "Restoring: $LATEST"
-gunzip -c "$LATEST" | psql "$DATABASE_URL"
+psql -c "SELECT pg_reload_conf();"
 ```
 
-### Restore to a different database
+### 2. Verify archiving is working
+
+```sql
+SELECT archived_count, failed_count, last_archived_wal, last_archived_time
+FROM pg_stat_archiver;
+```
+
+`failed_count` should remain 0.  `last_archived_time` should advance every few
+minutes on an active server.
+
+### 3. Point-in-time restore using WAL
+
+Restore the base dump first (see below), then apply WAL segments up to the
+desired recovery point:
+
+```ini
+# recovery.conf (Postgres < 12) or postgresql.conf (Postgres ≥ 12)
+restore_command = 'aws s3 cp s3://${BACKUP_S3_BUCKET}/wal/%f %p \
+  --region ${BACKUP_S3_REGION}'
+recovery_target_time = '2026-10-15 14:30:00 UTC'  # example target
+recovery_target_action = 'promote'
+```
+
+Start PostgreSQL; it will apply WAL until the target time and then open for
+connections.
+
+---
+
+## Restore from base backup
+
+1. **Stop the indexer** to prevent writes during the restore:
+
+   ```bash
+   # If using systemd:
+   systemctl stop pero-j-indexer
+   # Or kill the Node.js process
+   ```
+
+2. **Create a fresh database** (or drop and recreate the existing one):
+
+   ```bash
+   createdb -h "$PGHOST" -U "$PGUSER" soroban_explorer
+   ```
+
+3. **Restore** with `pg_restore`:
+
+   ```bash
+   pg_restore -h "$PGHOST" -U "$PGUSER" -d soroban_explorer \
+     --no-owner --no-privileges --exit-on-error \
+     ./backups/soroban_explorer_20261015T020000Z.dump
+   ```
+
+4. **Verify** the restore:
+
+   ```bash
+   psql -h "$PGHOST" -U "$PGUSER" -d soroban_explorer \
+     -c "SELECT COUNT(*) FROM events; SELECT COUNT(*) FROM contracts;"
+   ```
+
+5. **Restart the indexer**.
+
+### Restore from S3
+
+If the local dump is unavailable, download from S3 first:
 
 ```bash
-# Create the target database first
-createdb -U user -h host soroban_explorer_restore
-
-# Restore
-gunzip -c backups/soroban_explorer_latest.sql.gz |
-  psql "postgres://user:password@host:5432/soroban_explorer_restore"
+aws s3 cp \
+  s3://${BACKUP_S3_BUCKET}/postgres-backups/soroban_explorer_20261015T020000Z.dump \
+  ./backups/ \
+  --region ${BACKUP_S3_REGION}
+# Then restore as above
 ```
 
 ---
 
-## Cloud Deployments (RDS / Cloud SQL)
+## Restore verification test
 
-### AWS RDS
+`scripts/backup-restore-test.sh` automates the restore-and-verify cycle.  Run
+it after every base backup to confirm recoverability:
 
-Automated backups are enabled by default with a 7-day retention period.
-
-**To verify or modify:**
-1. Open the [RDS Console](https://console.aws.amazon.com/rds/)
-2. Select your database instance
-3. Under **Maintenance & Backups**, confirm:
-   - **Automated backups**: Enabled
-   - **Backup retention period**: 7–35 days
-   - **Backup window**: choose an off-peak window
-
-**Manual snapshot (before risky operations):**
 ```bash
-aws rds create-db-snapshot \
-  --db-instance-identifier soroban-explorer \
-  --db-snapshot-identifier soroban-explorer-pre-deploy-$(date +%Y%m%d)
+./scripts/backup-restore-test.sh
 ```
 
-### Google Cloud SQL
+The script:
+1. Finds the most recent dump in `BACKUP_DIR` (or uses `DUMP_FILE` if set).
+2. Creates a temporary `${PGDATABASE}_restore_test` database.
+3. Restores the dump into it.
+4. Queries row counts for `events` and `contracts` tables.
+5. Drops the test database on exit regardless of outcome.
 
-Automated backups are enabled by default with a 7-day retention.
+Run it in CI or as part of a weekly scheduled job to validate backup integrity:
 
-**To configure:**
-1. Open the [Cloud SQL Console](https://console.cloud.google.com/sql/)
-2. Select your instance → **Backups** tab
-3. Enable **Automated backups** and set a preferred window
-
-**Manual backup:**
-```bash
-gcloud sql backups create --instance soroban-explorer \
-  --description "pre-deploy backup $(date +%Y%m%d)"
+```cron
+# Weekly restore test every Sunday at 03:00 UTC
+0 3 * * 0 cd /path/to/repo && ./scripts/backup-restore-test.sh >> /var/log/pg-restore-test.log 2>&1
 ```
-
-### Azure Database for PostgreSQL
-
-Automated backups are enabled by default with a 7–35 day retention.
-
-**To configure:**
-1. Open the [Azure Portal](https://portal.azure.com/)
-2. Navigate to your PostgreSQL flexible server
-3. Under **Settings → Backup**, set retention period and preferred window
 
 ---
 
-## Testing Backups
+## Minimum dump size
 
-Periodically verify that backups are restorable:
-
-```bash
-# Create a temporary database
-createdb -U user soroban_explorer_test_restore
-
-# Restore the latest backup into it
-gunzip -c backups/soroban_explorer_latest.sql.gz |
-  psql "postgres://user:password@localhost:5432/soroban_explorer_test_restore"
-
-# Query to verify (should return data)
-psql "postgres://user:password@localhost:5432/soroban_explorer_test_restore" \
-  -c "SELECT count(*) FROM events;" \
-  -c "SELECT count(*) FROM contracts;"
-
-# Clean up
-dropdb -U user soroban_explorer_test_restore
-```
-
-## Minimum Dump Size
-
-The backup script verifies that the dump file is larger than 512 bytes before reporting success. If the dump is too small (e.g., an empty database or a failed `pg_dump`), the script removes the file and exits with a non-zero status. This prevents false-positive backups.
+`scripts/backup.sh` rejects a dump smaller than 512 bytes — an empty or
+near-empty dump almost always indicates a `pg_dump` misconfiguration or a
+connectivity problem rather than a genuinely empty database.
 
 ---
 
-## Monitoring
+## Cloud-managed backup options
 
-- Check `/var/log/backup.log` for success/failure messages
-- Set up a cron healthcheck (e.g., [healthchecks.io](https://healthchecks.io/))
-  by appending `&& curl -fsS -m 10 --retry 5 -o /dev/null "$HEARTBEAT_URL"`
-  to the cron command
-- For RDS / Cloud SQL, enable CloudWatch / Cloud Monitoring alerts for
-  backup events
+For cloud-hosted PostgreSQL, complement `scripts/backup.sh` with the provider's
+built-in automated backups:
 
----
+| Platform | Automated backups | PITR |
+|----------|------------------|------|
+| **AWS RDS / Aurora** | Enable *Automated backups* in the console; set retention (recommended ≥ 7 days). | Enabled when automated backups are on. |
+| **Google Cloud SQL** | Instance settings → *Backups* → enable, set retention. | Enable *Point-in-time recovery* in the same panel. |
+| **Supabase** | Dashboard → Project Settings → Database → Backups (paid plans). | Available on Pro+ plans. |
+| **Neon** | Dashboard → Settings → Branches; Neon branches act as snapshots. | Rewind to any point within the retention window. |
 
-## Quick Reference
-
-| Action                          | Command                                                                 |
-|---------------------------------|-------------------------------------------------------------------------|
-| Manual backup                   | `./scripts/backup.sh`                                                   |
-| Restore latest backup           | `gunzip -c \$(ls -t backups/soroban_explorer_*.sql.gz \| head -1) \| psql "\$DATABASE_URL"` |
-| Daily cron                      | `0 2 * * * /path/to/scripts/backup.sh >> /var/log/backup.log 2>&1`     |
-| RDS manual snapshot             | `aws rds create-db-snapshot --db-instance-identifier soroban-explorer ...` |
-| Cloud SQL manual backup         | `gcloud sql backups create --instance soroban-explorer ...`             |
+For any provider, also run `scripts/backup.sh` on a schedule to produce an
+independent off-site copy in your own S3 bucket.

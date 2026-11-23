@@ -8,6 +8,394 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Add full jitter backoff to Soroban RPC retries ([`fea638f`](../../commit/fea638fd26eea96d91de73c8a386130c74b9554c))
+
+Closes [#938](../../issues/938)
+
+
+- [#1010](../../issues/1010) ci: add PostgreSQL and Redis service containers for automated ([`8a75968`](../../commit/8a75968f5bab518935890dd1dd367f3b1f7df5f8))
+
+Closes [#1010](../../issues/1010)
+
+
+- [#1009](../../issues/1009) ci: expand GitHub Actions workflow matrix to test backend, in ([`088f040`](../../commit/088f040d4f953ac8450e88a1d2247f50017aa77b))
+
+Closes [#1009](../../issues/1009)
+
+
+- [#1008](../../issues/1008) fix(frontend): audit accessibility (a11y) landmarks, ARIA lab ([`6b04971`](../../commit/6b04971133b54b3cf253fa8fcf6172b57e26fcf3))
+
+Closes [#1008](../../issues/1008)
+
+
+- [#1006](../../issues/1006) perf(frontend): dynamic import heavy chart libraries to reduc ([`a8df3b3`](../../commit/a8df3b3f16df6ed735e8942904850cf42f6f890e))
+
+Closes [#1006](../../issues/1006)
+
+
+- [#1002](../../issues/1002) feat(frontend): support additional Stellar wallets including ([`1b13684`](../../commit/1b13684ec09124bfb3b5b949a430b2045d818d16))
+
+Closes [#1002](../../issues/1002)
+
+
+- [#1000](../../issues/1000) feat(frontend): implement graceful fallback from Backend API ([`b1ed360`](../../commit/b1ed36068cf0b08e82c77842a470ac75c683b906))
+
+Closes [#1000](../../issues/1000)
+
+
+- [#994](../../issues/994) feat(frontend): build public Dispute Detail page showing bond ([`6a63119`](../../commit/6a631190d689e18d2ac9537eb6c2d61e3aeb4b1b))
+
+Closes [#994](../../issues/994)
+
+
+- [#993](../../issues/993) feat(frontend): build Oracle Challenge modal with live countdo ([`10fc7b0`](../../commit/10fc7b0066d835100e2a19032c7df1cbd40ad97e))
+
+Closes [#993](../../issues/993)
+
+
+- Synthetic probe monitoring, webhook alert notifier, multisig admin, and oracle replay defenses ([`f3ca508`](../../commit/f3ca508b1c8c71b09d9c1c4c93edbe606372ecd3))
+
+- Configure synthetic probe monitoring for frontend uptime and Soroban RPC health ([#1027](../../issues/1027))
+  - Implement Discord/Slack webhook notification bot for high-severity alerts ([#1028](../../issues/1028))
+  - Implement multi-signature admin key requirement for contract upgrade and fee withdrawal ([#1030](../../issues/1030))
+  - Implement replay attack defenses on off-chain oracle signed payloads ([#1034](../../issues/1034))
+
+  Closes [#1027](../../issues/1027)
+  Closes [#1028](../../issues/1028)
+  Closes [#1030](../../issues/1030)
+  Closes [#1034](../../issues/1034)
+
+
+- [#747](../../issues/747) `get_events()` must cap `limit` to prevent CPU exhaustion ([`58139bf`](../../commit/58139bfb29c0e0cddc1af6f34af9566a4ccb5a11))
+
+Closes [#747](../../issues/747)
+
+
+- [#746](../../issues/746) `submit_event()` must accept allowlisted hot-wallet indexers ([`144af0c`](../../commit/144af0c87f56dcc80e291836e80d99d55fa9dade))
+
+Closes [#746](../../issues/746)
+
+
+- [#745](../../issues/745) `init()` must be permanently irreversible after first call ([`2a64bb5`](../../commit/2a64bb5288d1b1f8dbf392bfa0e7d2915f991a28))
+
+Closes [#745](../../issues/745)
+
+
+- Add isMissingFunctionError helper to validateSep41.js ([`e0a4cda`](../../commit/e0a4cda6aed51532e91db95396a9ef85ab2dab92))
+
+- isMissingFunctionError(err) is defined and exported, detecting
+    fn_not_found, function not found, no such function, and invalid
+    function error patterns.
+  - validateSep41 correctly returns true for present functions.
+  - Remove duplicate export of mapWithConcurrency that caused a
+    SyntaxError (Duplicate export).
+  - Fix duplicate import and unclosed describe/it blocks in
+    validateSep41.test.js caused by a bad merge.
+
+  Closes [#819](../../issues/819)
+
+
+- Address explorer issues 748-751 ([`50aa764`](../../commit/50aa7648b300f7f8fba5fa42f6bd1b1704d04bdc))
+
+- Address indexer issue checks ([`51a9735`](../../commit/51a9735f6018e370f7b8440eebe22e83b0c8f758))
+
+- Address issues 756-759 ([`77f3094`](../../commit/77f309477c5ff8fe9579c06e3a4e9b9806a7908e))
+
+- Refresh EventSeq TTL on submissions ([`6830264`](../../commit/68302648c121eccb97244ce9a129ebbe64dfebf7))
+
+- Add paginated wallet events endpoint ([`d6bfa5d`](../../commit/d6bfa5d135494cda54e16c0044ca5463a2fd9d16))
+
+- Ensure sac_asset column exists ([`355c698`](../../commit/355c698e5db8e17a3162627291835d7ce9e4c0ee))
+
+- Use GIN index for wallet event queries ([`df010b2`](../../commit/df010b2a97a13e7f6053c8bd84d13fa06e972398))
+
+- Resolve false instead of leaving holes in mapWithConcurrency ([`29d7bb6`](../../commit/29d7bb639d5d3c6270c691c9f658a4a1f4696b7c))
+
+A throwing mapper left its slot in the results array empty, creating a hole.
+  Array.prototype.every skips holes entirely, so a mapper failure was silently
+  reported as compliance.
+
+  - mapWithConcurrency now catches mapper errors and resolves results[i] = false
+  - validateSep41 consumes the returned values instead of mutating a closure,
+    so the error path is actually exercised and results is always dense
+  - tests: throwing mapper yields all-false, no holes, and a failing check
+    forces { compliant: false }
+
+
+- [#865](../../issues/865) Add `WalletPage` document title update on address change ([`8081bc4`](../../commit/8081bc4f11fb84836f91a90d00076c0322885aae))
+
+Closes [#865](../../issues/865)
+
+
+- [#864](../../issues/864) Add `EventPage` with full decoded event detail view ([`cd157e4`](../../commit/cd157e46a1ba2e6130cdb08fa0ded1cd14297c53))
+
+Closes [#864](../../issues/864)
+
+
+- [#863](../../issues/863) Implement `GET /api/events` full-text search with `q` paramete ([`494189c`](../../commit/494189c376665b99ad79c78d25f2c429edc1bd17))
+
+Closes [#863](../../issues/863)
+
+
+- [#862](../../issues/862) Add `fuzz` targets for Rust contract input validation ([`24a333b`](../../commit/24a333bc35a0b2b7d3ba984f773125a367dc712c))
+
+Closes [#862](../../issues/862)
+
+
+- [#853](../../issues/853) Fix `transfer` description to read amount from event data, not ([`a76eb7e`](../../commit/a76eb7e0b47eca0aee194ef01427f033e6af9529))
+
+Closes [#853](../../issues/853)
+
+
+- [#852](../../issues/852) Add `extractAddresses` to collect wallet addresses from events ([`28bb226`](../../commit/28bb2260a33ab87604cb7db7e1145f09d6c47310))
+
+Closes [#852](../../issues/852)
+
+
+- [#851](../../issues/851) Add `isValidStellarAddress` guard to `GET /api/wallet/:address ([`1a795f4`](../../commit/1a795f423dfc4267f1a0126cca27503941ab1a45))
+
+Closes [#851](../../issues/851)
+
+
+- [#850](../../issues/850) Implement `transfer_admin` requiring both parties to sign ([`eba71ae`](../../commit/eba71ae853474c2618ee3ea99df6e24128e55845))
+
+Closes [#850](../../issues/850)
+
+
+- [#849](../../issues/849) Add `stellar.toml` SEP-1 compliant network info file ([`5a6063c`](../../commit/5a6063c8d9d039e44b34990614b011efd5ef250e))
+
+Closes [#849](../../issues/849)
+
+
+- [#848](../../issues/848) Add `GET /api/contracts/:id/events` paginated event history fo ([`40970be`](../../commit/40970be98f70be1e7bd0d322579f05edcc55cf93))
+
+Closes [#848](../../issues/848)
+
+
+- [#847](../../issues/847) Add automated PostgreSQL backup strategy with `pg_dump` ([`10a6843`](../../commit/10a684329b50fa66277fab268b550e050270b3cf))
+
+Closes [#847](../../issues/847)
+
+
+- [#846](../../issues/846) Add CI workflow for React frontend build and tests ([`7241d26`](../../commit/7241d266484372215a436d63011bf92226971ef6))
+
+Closes [#846](../../issues/846)
+
+
+- [#869](../../issues/869) Wrap all async Express handlers with asyncHandler ([`4e5f039`](../../commit/4e5f0393a934bbb58657225c0076a03ba0ec16de))
+
+Closes [#869](../../issues/869)
+
+
+- [#868](../../issues/868) Rename Update button to Update metadata with confirmation dial ([`968c0de`](../../commit/968c0de1e2017be7cf424e7befaee1ce5da49ac6))
+
+Closes [#868](../../issues/868)
+
+
+- [#867](../../issues/867) Add centralised Express error-handling middleware ([`1cd8ede`](../../commit/1cd8edef94c2fd66543fe927b51db67b50bce687))
+
+Closes [#867](../../issues/867)
+
+
+- [#866](../../issues/866) Add `mobile-responsive` CSS for frontend at Tranche 3 launch ([`a29f31e`](../../commit/a29f31e3987a2fb343a14d7e4491661758f5be82))
+
+Closes [#866](../../issues/866)
+
+
+- [#845](../../issues/845) Add CI workflow for Node.js indexer tests ([`d5c3841`](../../commit/d5c384184e7774ea16546858add803e58dc2f0e2))
+
+Closes [#845](../../issues/845)
+
+
+- [#844](../../issues/844) Add CI workflow for Rust contract tests ([`eeacd4f`](../../commit/eeacd4f311aede56c7b58a5c1891f78d9341cad6))
+
+Closes [#844](../../issues/844)
+
+
+- [#843](../../issues/843) Implement `LRU cache eviction` on `update` event from indexer ([`2c0541c`](../../commit/2c0541cfcb609c0378e9f15aef7557d3fd9afff8))
+
+Closes [#843](../../issues/843)
+
+
+- [#842](../../issues/842) Add developer documentation for ABI registration ([`dd315cf`](../../commit/dd315cfaa3542a16c3c470975ef1da0b90c45f61))
+
+Closes [#842](../../issues/842)
+
+
+- [#841](../../issues/841) Add `CONTRIBUTING.md` with PR and issue guidelines ([`ca8891f`](../../commit/ca8891f386adb68d30b9b04822a9af90b8f66254))
+
+Closes [#841](../../issues/841)
+
+
+- [#840](../../issues/840) Add Kubernetes deployment manifests ([`0ee0d54`](../../commit/0ee0d5425c2d8c45235c6605a5f7771423041c58))
+
+Closes [#840](../../issues/840)
+
+
+- [#839](../../issues/839) Add `docker-compose.yml` for local development ([`1f200c0`](../../commit/1f200c0659d7008100a1d8b614c34bec057d1f80))
+
+Closes [#839](../../issues/839)
+
+
+- [#838](../../issues/838) Add `ContractsPage` to list all registered contracts ([`e3e401b`](../../commit/e3e401b11d35d85a6ed67976aa964aa8826caf34))
+
+Closes [#838](../../issues/838)
+
+
+- [#861](../../issues/861) Add `eslint.config.js` and `.prettierrc` to indexer for code c ([`4991adb`](../../commit/4991adb4ac23b82a4c418951937c522b939aa1a1))
+
+Closes [#861](../../issues/861)
+
+
+- [#860](../../issues/860) Add `ContractList` to track all registered contract IDs on-cha ([`b4aa8b8`](../../commit/b4aa8b83d0a8382590a1c7a1a41ea765ecade7b7))
+
+Closes [#860](../../issues/860)
+
+
+- [#859](../../issues/859) Add `SECURITY.md` with admin transfer and emergency recovery p ([`4ba4fb7`](../../commit/4ba4fb7128ca1265d563c9d293799897af213d2a))
+
+Closes [#859](../../issues/859)
+
+
+- [#858](../../issues/858) Add `migrate` target to `Makefile` ([`b1ac0fd`](../../commit/b1ac0fdb37bf6e16cf0c5ef50f5ec7b9d7ede288))
+
+Closes [#858](../../issues/858)
+
+
+- [#837](../../issues/837) Add `GET /api/stats` endpoint for aggregate counts ([`ce54a0e`](../../commit/ce54a0ed5cce84648c13ddbd4640b9d29743dfa2))
+
+Closes [#837](../../issues/837)
+
+
+- [#836](../../issues/836) Add advisory lock to `db.init()` migrations to prevent concurr ([`ed89c74`](../../commit/ed89c7450f72b47589cc8e211c000e9d31d774cb))
+
+Closes [#836](../../issues/836)
+
+
+- [#835](../../issues/835) Remove duplicate `export function startApi` declaration from ` ([`713d2bd`](../../commit/713d2bdfdceda49bc82a6a4f3a456444a9c3419e))
+
+Closes [#835](../../issues/835)
+
+
+- [#834](../../issues/834) `validateContractPayload` must be defined in `api.js` ([`029d6c3`](../../commit/029d6c3fad47712dd9be3aa707a57b2aad880dca))
+
+Closes [#834](../../issues/834)
+
+
+- [#857](../../issues/857) Add `LAG_ALERT_THRESHOLD_S` env var to override health alert t ([`65f7274`](../../commit/65f7274fa0526d8b16ce92df954231e695d8bf59))
+
+Closes [#857](../../issues/857)
+
+
+- [#856](../../issues/856) Add `EventTable` empty state with custom message and subtitle ([`bf8b9bb`](../../commit/bf8b9bbe13c14cc2b66f0878a842e00f7bb98237))
+
+Closes [#856](../../issues/856)
+
+
+- [#855](../../issues/855) Add `NOT_REGISTERED_TTL_MS` short-cache for negative ABI looku ([`a8c99e1`](../../commit/a8c99e146ff5bc04b1f63faabbe80b1e3db234f3))
+
+Closes [#855](../../issues/855)
+
+
+- [#854](../../issues/854) Cap `getEvents` limit at `MAX_PAGE (200)` in the database laye ([`1d6d32f`](../../commit/1d6d32f3cadb22a2a02ffe6ddb3c2eb5a8eb8597))
+
+Closes [#854](../../issues/854)
+
+
+- [#833](../../issues/833) Register StellarSwap, Blend, and Phoenix ABI fixtures on start ([`e0ff17e`](../../commit/e0ff17e96b7457fae0c2abcba1c4217f87c6916c))
+
+Closes [#833](../../issues/833)
+
+
+- [#832](../../issues/832) Add `swap` case to `buildDescription()` ([`aaeee9a`](../../commit/aaeee9a67d50a44b6a0b869bf1adc241424c1f3f))
+
+Closes [#832](../../issues/832)
+
+
+- [#831](../../issues/831) Add `stake` and `unstake` cases to `buildDescription()` ([`3112846`](../../commit/3112846cb96f20ee3e588d2c9383ee4409de49b2))
+
+Closes [#831](../../issues/831)
+
+
+- [#830](../../issues/830) Add `approve` case to `buildDescription()` ([`9de8a62`](../../commit/9de8a628f7b9782057c4902a0ff96e9bb79e099e))
+
+Closes [#830](../../issues/830)
+
+
+- Use npm install instead of npm ci for frontend ([`d861fa5`](../../commit/d861fa5e74f0747a510b5bafaa4f363296cfac61))
+
+vitest@4.1.11 bundles its own vite which requires esbuild ^0.27.0||^0.28.0,
+  while the outer vite@5.3.1 requires esbuild ^0.21.3. These ranges don't
+  overlap so Linux npm resolves them into separate nested installs, producing
+  platform-specific lock file entries that a macOS-generated lock file omits.
+
+  Switching to npm install lets the resolver handle this correctly on each
+  platform without requiring a Linux-generated lock file in the repo
+
+
+- Regenerate frontend package-lock.json and pin node-version to 20.x ([`3f5f440`](../../commit/3f5f440429f26c8f972d1b2eb56d6e475af5c264))
+
+The frontend CI was failing with 'npm ci can only install packages when
+  package.json and package-lock.json are in sync' because package-lock.json
+  was missing esbuild@0.28.2 and all its platform-specific packages.
+
+  Regenerate package-lock.json by running npm install fresh. Also add npm
+  cache configuration (cache: 'npm') and pin node-version to '20.x' (string
+  form) so setup-node resolves the latest Node 20 patch rather than the
+  bare integer which can be ambiguous on newer runners
+
+
+- Resolve issues [#784](../../issues/784), [#785](../../issues/785), [#786](../../issues/786), [#787](../../issues/787) ([`5ac5e5a`](../../commit/5ac5e5a6dd9dfa83ea6d4bf7d2d5e243502a6a22))
+
+[#787](../../issues/787) — db.getContracts() LIMIT/OFFSET parameter indexing
+  - Replace fragile $${params.length+1}/+2 arithmetic with explicit push
+    into selectParams so $N indices are always correct regardless of how
+    many WHERE conditions precede LIMIT/OFFSET.
+  - Add regression test in db.test.js asserting $1/$2/$3 positions when
+    q, page, and limit are all provided.
+  - Add route-level regression test in api.contracts.test.js confirming
+    GET /api/contracts?q=swap&page=2&limit=10 forwards all three opts.
+
+  [#786](../../issues/786) — Full-text search index on events.description
+  - Migration 5 (already present) adds description_tsv TSVECTOR GENERATED
+    ALWAYS AS (to_tsvector('english', description)) STORED and GIN index
+    idx_events_description_tsv.
+  - getEvents() now branches on isWordSafe (/^[\w\s]+$/) to use
+    description_tsv @@ plainto_tsquery('english', $N) for plain-word
+    queries (index scan) and falls back to ILIKE for special-char queries.
+  - Fixes the four pre-existing failing tests in db.test.js ([#321](../../issues/321) block).
+
+  [#785](../../issues/785) — Validate POST /api/contracts payload before upsert
+  - Define and export validateContractPayload() in api.js: id required
+    non-empty string, name required non-empty string, functions optional
+    but must be array when present. Returns null for valid payloads.
+  - Add api.contracts.post.test.js with 13 unit tests for the helper and
+    9 HTTP integration tests covering all acceptance criteria (400 for
+    missing id/name, 400 for non-array functions, 201 for valid payload).
+
+  [#784](../../issues/784) — sourceAccountNotFound retry in sep41Metadata simulation
+  - Add SourceAccountNotFoundError sentinel class; simulateCall throws it
+    instead of recursing when seq=0 and the RPC reports account missing.
+  - fetchTokenMetadata calls name sequentially first; on catch retries
+    name with seq=1 and returns partial defaults for symbol/decimals
+    (exactly 2 simulate calls, no cascading retries).
+  - OPERATIONAL_ACCOUNT env var overrides dummy source; warning already
+    logged on non-testnet fallback.
+  - Fix IDS pool exhaustion in sep41Metadata.test.js (6 → 16 entries).
+
+  Additional CI fixes (pre-existing failures):
+  - decoder.js: add buildDescription handlers for supply, borrow, repay,
+    liquidate, deposit, withdraw.
+  - decoder.test.js: declare C14–C20; move approve to C19 and
+    transfer_from to C20 to eliminate LRU cache collisions.
+  - api.js: implement GET /api/events/:seq/raw route (was tested but
+    missing); registered before /:seq to prevent route shadowing.
+
+
+- Address issues 768, 770, 771, 772 ([`4e054d0`](../../commit/4e054d036c69101d9d019fed8d93c7f11d46ffc2))
+
+- Harden SAC parsing and signed SCVal decoding ([`ee19d80`](../../commit/ee19d806125d9177d51541bcc721dcefb8c56cc5))
+
 - React keys, search query, and debounce in EventTable and Home ([`b3be6a2`](../../commit/b3be6a2cc8b51288676a183ef53944eafffeea16))
 
 - EventTable.tsx ([#303](../../issues/303)): wrap each event pair in <React.Fragment key={ev.seq}>
@@ -623,7 +1011,230 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 
+### CI / CD
+
+- Fix frontend Node and lockfile ([`bbf0ec1`](../../commit/bbf0ec1ae4733eb5bde2275dbc0e60b3e50d558d))
+
+
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`cafb672`](../../commit/cafb6722df9a7b3f7776583399c10eba7bddadfc))
+
+- Auto-update CHANGELOG.md [skip ci] ([`a67f935`](../../commit/a67f9351de84fe5a74f22ca3d774b160f0b89704))
+
+- Auto-update CHANGELOG.md [skip ci] ([`960c4eb`](../../commit/960c4eb76a3f8406d8855d3cd88713b048642e14))
+
+- Auto-update CHANGELOG.md [skip ci] ([`ddf0ee1`](../../commit/ddf0ee10e5cfce97877e8ede6d24f87cf8be4f7c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`5569330`](../../commit/5569330cb81e49574005d1f95283356b02c1623d))
+
+- Auto-update CHANGELOG.md [skip ci] ([`077fa34`](../../commit/077fa3462dd86924903d2df1e66da667e97bdaff))
+
+- Auto-update CHANGELOG.md [skip ci] ([`7cf22a7`](../../commit/7cf22a746b9d7ca31a986a121cbddbf5838e8bf2))
+
+- Compile runbook index mapping each operational alert to its exact recovery procedure ([`e1e5363`](../../commit/e1e53636779d62dc6b16d532de55a7af1e6b9ac3))
+
+- Auto-update CHANGELOG.md [skip ci] ([`10e6d72`](../../commit/10e6d7245e802c120556b5c3f6c6b182c4c736c1))
+
+- Auto-update CHANGELOG.md [skip ci] ([`c2742ac`](../../commit/c2742ac870d86c0ce1d6d7af85ebdf25dfe7092d))
+
+- Auto-update CHANGELOG.md [skip ci] ([`0670956`](../../commit/067095630146ab2da49e25c029990bffe8a4be84))
+
+- Auto-update CHANGELOG.md [skip ci] ([`6dc3378`](../../commit/6dc33781ee4f6612f3b0679490763b64ba7ca084))
+
+- Auto-update CHANGELOG.md [skip ci] ([`1bdab8d`](../../commit/1bdab8d66a9de33c0b1a37b60d2cbdc050c43647))
+
+- Auto-update CHANGELOG.md [skip ci] ([`31bf74c`](../../commit/31bf74c43d63faff4361969f1a10c79efee17144))
+
+- Auto-update CHANGELOG.md [skip ci] ([`fb067d1`](../../commit/fb067d1ed5dd07be60f8832fb7155c3d65feaf5c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`9f90040`](../../commit/9f900407086563b8eeb8b05547ab292223aa44ca))
+
+- Auto-update CHANGELOG.md [skip ci] ([`7c03380`](../../commit/7c033801d6a07d131ae62abe8349c926882e8c8a))
+
+- Auto-update CHANGELOG.md [skip ci] ([`550b774`](../../commit/550b774c7cd3e46fbe0ce84c2a8aba802afd25d6))
+
+- Auto-update CHANGELOG.md [skip ci] ([`092d267`](../../commit/092d267be498b29ba1e5ac1852fd299ed70900fb))
+
+- Auto-update CHANGELOG.md [skip ci] ([`4a27fc6`](../../commit/4a27fc646d8709a95609701f9e57e7c08a3b7114))
+
+- Auto-update CHANGELOG.md [skip ci] ([`f6afe0d`](../../commit/f6afe0d18558710e8f6779d10bd1560ecf5a010b))
+
+- Auto-update CHANGELOG.md [skip ci] ([`4e7ea61`](../../commit/4e7ea611441b0b7c7d3106ae388bc1c98beea083))
+
+- Auto-update CHANGELOG.md [skip ci] ([`defb4ce`](../../commit/defb4cef31cd42145306fb563d280767422117c4))
+
+- Auto-update CHANGELOG.md [skip ci] ([`69c3c67`](../../commit/69c3c6704120dcb838402b0c4d8d7027a9a9004b))
+
+- Auto-update CHANGELOG.md [skip ci] ([`1ce17cb`](../../commit/1ce17cb5d0ae11f1f73526c883b9d464f7db70c8))
+
+- Auto-update CHANGELOG.md [skip ci] ([`bd9e6f6`](../../commit/bd9e6f6ae1e2344c9ef40279b9aa8acdfda9da3c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`d9e81b7`](../../commit/d9e81b717920fa6b7a26e3be93d0f35634c989a8))
+
+- Add public documentation for bond deposits, challenge windows, and slashing rules ([`d507fab`](../../commit/d507fabc7c2934c636eb22a1731e4d0a90370f41))
+
+- Auto-update CHANGELOG.md [skip ci] ([`07fe28e`](../../commit/07fe28e47c9502a0caba157cf0b130ecce748283))
+
+- Auto-update CHANGELOG.md [skip ci] ([`f3c9872`](../../commit/f3c98723126b98f9bea71de5a7d3f4209c061e2b))
+
+- Auto-update CHANGELOG.md [skip ci] ([`12ebff1`](../../commit/12ebff19105220c7724abb8d8567796784d54021))
+
+- Auto-update CHANGELOG.md [skip ci] ([`cb31d0a`](../../commit/cb31d0afd879d895594f0c2583e90834679a6b45))
+
+- Auto-update CHANGELOG.md [skip ci] ([`fff7807`](../../commit/fff7807d42233b6f630b4f58b6cf0409c2472a44))
+
+- Auto-update CHANGELOG.md [skip ci] ([`4cbcdde`](../../commit/4cbcdde7c9a3ecc0925595a0e9b7af21d3949275))
+
+- Auto-update CHANGELOG.md [skip ci] ([`94c4279`](../../commit/94c42798988f72944c9a6304e18bb72060fa99d8))
+
+- Auto-update CHANGELOG.md [skip ci] ([`bb1f665`](../../commit/bb1f665a919a2b0d9b1e18f63f3f7122204ccf03))
+
+- Auto-update CHANGELOG.md [skip ci] ([`ae389b7`](../../commit/ae389b700892fb2818ba1f910e878e0cb9682390))
+
+- Auto-update CHANGELOG.md [skip ci] ([`6a5ac8a`](../../commit/6a5ac8ab4f84444a567c815942c1be642ec319da))
+
+- Auto-update CHANGELOG.md [skip ci] ([`a954297`](../../commit/a954297e05524281c6fe2ee5595c6a0b4de93f55))
+
+- Auto-update CHANGELOG.md [skip ci] ([`df76398`](../../commit/df763988e479afdfa18c2a322b814d5d6e3e6f5d))
+
+- Auto-update CHANGELOG.md [skip ci] ([`b45c611`](../../commit/b45c6111c8e3f46bd1c1237e443a98654f9e5198))
+
+- Auto-update CHANGELOG.md [skip ci] ([`e71c08a`](../../commit/e71c08aea5b61f0b172f76fce66605f53a17dfcd))
+
+- Auto-update CHANGELOG.md [skip ci] ([`c7d4497`](../../commit/c7d4497bba68ac719ac432e88b604cccc0c0f484))
+
+- Auto-update CHANGELOG.md [skip ci] ([`fb86f46`](../../commit/fb86f4607288eb7143209c9283c75ff5a53719dc))
+
+- Auto-update CHANGELOG.md [skip ci] ([`04e03a1`](../../commit/04e03a1546f6295afacb20cfd1dd7098b25abc9c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`4b07303`](../../commit/4b073032ea87f41c79bac0821473513962ec68e1))
+
+- Auto-update CHANGELOG.md [skip ci] ([`6a8952c`](../../commit/6a8952c6bf5aee832e479db4196c17bbecf761ee))
+
+- Auto-update CHANGELOG.md [skip ci] ([`21be3f2`](../../commit/21be3f2cf122fce3727ef37e97ef4096d4e40ebf))
+
+- Auto-update CHANGELOG.md [skip ci] ([`6eb65ed`](../../commit/6eb65edc51a6743dcfdd2b9e83fc19c919ca8468))
+
+- Auto-update CHANGELOG.md [skip ci] ([`023c511`](../../commit/023c51174b12f2720c40c8da1b9db19d4a47a0f7))
+
+- Auto-update CHANGELOG.md [skip ci] ([`f76dd57`](../../commit/f76dd5753d61f8ac857dcea37391aed37cdef53e))
+
+- Auto-update CHANGELOG.md [skip ci] ([`56295de`](../../commit/56295de01c5a70d247292ac42c446b96a1c46d4c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`df45aa3`](../../commit/df45aa3ccd5217cd703bbc30fb6148424a37feea))
+
+- Auto-update CHANGELOG.md [skip ci] ([`dbc88a1`](../../commit/dbc88a16b9a22db110cef890e8ff377aa262f53c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`861b291`](../../commit/861b29193901a0dd8da9ef533e52d9dc133c241d))
+
+- Auto-update CHANGELOG.md [skip ci] ([`4f33da4`](../../commit/4f33da42706c10acafb4e1a6c6e4ba0843430220))
+
+- Auto-update CHANGELOG.md [skip ci] ([`c8ad944`](../../commit/c8ad9441917c159da99729fc9c161baf26bd6cda))
+
+- Auto-update CHANGELOG.md [skip ci] ([`8607095`](../../commit/86070959f45ec1302a00de076575c8b4cb23747b))
+
+- Auto-update CHANGELOG.md [skip ci] ([`3167e8a`](../../commit/3167e8a3b120dc11e07b26f3145f109e05cd5f89))
+
+- Auto-update CHANGELOG.md [skip ci] ([`bb1eeca`](../../commit/bb1eeca69ae041ef18b3528953e010a2a29d843e))
+
+- Auto-update CHANGELOG.md [skip ci] ([`65cac23`](../../commit/65cac237e43d54522170090734f8fbccb8b9ce66))
+
+- Auto-update CHANGELOG.md [skip ci] ([`616702f`](../../commit/616702f6934a56e1f80441936d24811849a0a757))
+
+- Auto-update CHANGELOG.md [skip ci] ([`da5607d`](../../commit/da5607da63529381e11704d54e44b442d021ec5b))
+
+- Auto-update CHANGELOG.md [skip ci] ([`3a10d00`](../../commit/3a10d00550e5c586407a2ef978a34f7f3d328f90))
+
+- Auto-update CHANGELOG.md [skip ci] ([`314822e`](../../commit/314822ec34b7f18d0ed99fc4fbda31490f2d4d35))
+
+- Auto-update CHANGELOG.md [skip ci] ([`5f131b9`](../../commit/5f131b91d28dd0a0af5d90b2fe467893d8334eca))
+
+- Auto-update CHANGELOG.md [skip ci] ([`7116486`](../../commit/71164862dbfa5047da2ff728a8663fe028223a77))
+
+- Auto-update CHANGELOG.md [skip ci] ([`e846fba`](../../commit/e846fba3a10e00749812ffd3a04abd3ef6e390af))
+
+- Auto-update CHANGELOG.md [skip ci] ([`281650d`](../../commit/281650dbbc5ed8a30b2e82d8ba39549e65c26f76))
+
+- Auto-update CHANGELOG.md [skip ci] ([`1e2ac6a`](../../commit/1e2ac6a638e96e404aafb821ec18e96cd469bccc))
+
+- Auto-update CHANGELOG.md [skip ci] ([`05f4eda`](../../commit/05f4edac9aa8370cb1614b05644c9d06197a0164))
+
+- Auto-update CHANGELOG.md [skip ci] ([`f73f414`](../../commit/f73f414ab11985b7e7e0b8c8f8d7ec02c435b809))
+
+- Note [#803](../../issues/803) RPC client recreation already implemented ([`cb5671e`](../../commit/cb5671eb67d5947298715e066b25f15d80c67d41))
+
+- Note [#801](../../issues/801) GET /api/contracts already implemented ([`23dfd3d`](../../commit/23dfd3d7a86b67b47d9b79fd0162c3f5f79cc0da))
+
+- Note [#800](../../issues/800) EventTable stable keys already implemented ([`9fabe3f`](../../commit/9fabe3f40e51cdac03fa881c07ac12ffb148f957))
+
+- Auto-update CHANGELOG.md [skip ci] ([`ed86ee1`](../../commit/ed86ee159751eebede0327182ac2be5bd1fb252e))
+
+- Note [#799](../../issues/799) ContractPage events guard already present ([`f62fbf2`](../../commit/f62fbf2eaf909da89bafa03985b27e5c69a25800))
+
+- Note [#798](../../issues/798) WalletPage Next button already fixed ([`7d6649c`](../../commit/7d6649c48391cfb06710f34c640426da92d4dbba))
+
+- Note [#797](../../issues/797) event count summary already implemented ([`73885db`](../../commit/73885dba5fe594c8f9439d199b1844ba605df7da))
+
+- Note [#796](../../issues/796) function filter dropdown already implemented ([`b58be92`](../../commit/b58be92898ff90a15ae7671b78ca64a07a0c4e11))
+
+- Auto-update CHANGELOG.md [skip ci] ([`bbe2429`](../../commit/bbe2429b4ac4a5f85ee6f9cb7dca3929a80d5035))
+
+- Note [#807](../../issues/807) already implemented ([`c988b2e`](../../commit/c988b2e357ab196b708620ba8411ee470dbf1832))
+
+- Note [#806](../../issues/806) already implemented ([`f68ad73`](../../commit/f68ad7333a66f061e35b2338f9d675c912227aa1))
+
+- Note [#805](../../issues/805) already implemented ([`59a0af9`](../../commit/59a0af9f348e4bfbd04c61674ec2c40b123c0296))
+
+- Note [#804](../../issues/804) already implemented ([`fb888a0`](../../commit/fb888a031d6aea7289982a8b3a63200d378a5aba))
+
+- Auto-update CHANGELOG.md [skip ci] ([`d93f7e2`](../../commit/d93f7e2f38ddd854523b1484c8a321920a0907fd))
+
+- Note [#811](../../issues/811) is already implemented on main ([`35bf3f8`](../../commit/35bf3f8429c0679a9578cf015712a744e24733af))
+
+- Note [#810](../../issues/810) is already implemented on main ([`be133e2`](../../commit/be133e28ee18659e49e40f6a2f25f1132af1bb9d))
+
+- Note [#809](../../issues/809) is already implemented on main ([`4dbfb9a`](../../commit/4dbfb9a94f8cb77ad34a631a53cc780722e2ed5c))
+
+- Note [#808](../../issues/808) is already implemented on main ([`cb3631e`](../../commit/cb3631ede028afbcbcfaa4dfb9b9d772d9ef58e4))
+
+- Auto-update CHANGELOG.md [skip ci] ([`c842703`](../../commit/c842703040a0af99c594bcca29d249461deebb31))
+
+- Note [#795](../../issues/795) search debounce already implemented ([`a1fa90f`](../../commit/a1fa90f78288aeda1f1997b639d187bd4fe80bd5))
+
+- Note [#794](../../issues/794) skeleton loading states already implemented ([`7f0ad23`](../../commit/7f0ad23ebd8b4f32980d2c1510a3d5841c8bba73))
+
+- Note [#793](../../issues/793) CopyButton ariaLabel already implemented ([`943178e`](../../commit/943178e11116434ba982c3652601c62ee3d9d8da))
+
+- Note [#792](../../issues/792) seq validation already implemented ([`57cc1b9`](../../commit/57cc1b9250d1e01f4894d4e7752ddee90dc3f47c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`575e7aa`](../../commit/575e7aa730deefdff79a597dd7cd4aae0647b84c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`c9644e4`](../../commit/c9644e49f02312e55fd077acca057d2f69056ef9))
+
+- Auto-update CHANGELOG.md [skip ci] ([`f79a97a`](../../commit/f79a97a5f7c033a4b45ee860305c9c5367401732))
+
+- Auto-update CHANGELOG.md [skip ci] ([`6a9d89f`](../../commit/6a9d89faed6d3d169ba21e40ffcfaee6f46217a0))
+
+- Auto-update CHANGELOG.md [skip ci] ([`ce2cd15`](../../commit/ce2cd157445fc59f2aa2d2d5ea902c0442e7a51c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`b197139`](../../commit/b197139bd49727392a3a8c231954b8aa638444a8))
+
+- Auto-update CHANGELOG.md [skip ci] ([`5ea7331`](../../commit/5ea7331f6945c1c6fae810de41c7ab73b79354cb))
+
+- Auto-update CHANGELOG.md [skip ci] ([`dc23c01`](../../commit/dc23c01989eab5d84c36756240d38569e93c307a))
+
+- Auto-update CHANGELOG.md [skip ci] ([`502ba1b`](../../commit/502ba1bb354c0ed9ca52510de8c058bcf5f026d6))
+
+- Auto-update CHANGELOG.md [skip ci] ([`a449e58`](../../commit/a449e5893782c0d039f580232e000354786ac766))
+
+- Auto-update CHANGELOG.md [skip ci] ([`18dd8bc`](../../commit/18dd8bc8e62397d3214ed568210dfdad84a5c102))
+
+- Auto-update CHANGELOG.md [skip ci] ([`96a9e2f`](../../commit/96a9e2f17eacca410517e110ddf0c89667daf6a5))
+
+- Auto-update CHANGELOG.md [skip ci] ([`2134a57`](../../commit/2134a57a69b3d086225f3affb7c0b5c40668a63a))
+
+- Auto-update CHANGELOG.md [skip ci] ([`6b61255`](../../commit/6b612554c94649052e4a8fdaa4505641221f28d1))
 
 - Auto-update CHANGELOG.md [skip ci] ([`bc83ced`](../../commit/bc83cedd948bcc6a645f6021c5afa2997d56d642))
 
@@ -837,6 +1448,308 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Zod event validation with DLQ and single-writer advisory lock ([`8f03bea`](../../commit/8f03beab87b4bf52c9ab763d79ce0704762583bd))
+
+Closes [#939](../../issues/939)
+  Closes [#934](../../issues/934)
+
+
+- Set up Prometheus scraping configuration and Prometheus alert manager ([`c83ca4b`](../../commit/c83ca4bfa0f2e3b7455dbb222a72fcf3dc6f27c2))
+
+- Configure alert rules for stuck markets (>48h past expiry) and council inactivity ([`764231d`](../../commit/764231d5c6f5cc2a5ec1faa0b8be30588ac9e15f))
+
+- Configure alert rules for indexer stall (lag > 100 ledgers) and RPC failure bursts ([`8c80654`](../../commit/8c80654a6306a6563a33ca22abc7253243bc9c9e))
+
+- Add market, IPREDICT token and referral registry contracts ([`46a47ed`](../../commit/46a47edf7c80d55db317f50c33bfad01da23d3d7))
+
+Closes [#926](../../issues/926)
+  Closes [#924](../../issues/924)
+  Closes [#923](../../issues/923)
+  Closes [#921](../../issues/921)
+
+  - token: multi-minter authorization (add_minter/remove_minter)
+  - market: pause/unpause circuit breaker, packed MarketStatus enum with legacy migration
+  - referral_registry: balance gate, cooldown, welcome bonus only after first bet
+
+
+- Add politics and science-weather adapters ([`b76cff2`](../../commit/b76cff2b06c739da9d2ed5f689384eca51c4a4eb))
+
+- Add Grafana dashboards for pipeline health, oracle states, and business KPIs (closes [#1024](../../issues/1024)) ([`f01972e`](../../commit/f01972e6abf25429044b1842fc7360f668ab96f7))
+
+- Deploy public status page with network latency, RPC status, and indexer lag (closes [#1025](../../issues/1025)) ([`543bebc`](../../commit/543bebc8e7f1e740b13266749945de9b56bc1c2a))
+
+- Wire oracle_submission and dispute event handlers into live event loop ([#932](../../issues/932)) ([`4b9ece9`](../../commit/4b9ece977f0fbd779fc100da5202090f03cd6451))
+
+- Add database migration for oracle_submissions, oracle_disputes, and markets tables
+  - Create oracle_submission handler to track submissions and update market state
+  - Create oracle_dispute handler to record challenges and disputes
+  - Create oracle_finalized handler to finalize oracle outcomes
+  - Wire handlers into indexer event loop with automatic routing
+  - Add invalidateMarketCache function for future Redis integration
+  - Add human-readable descriptions for oracle events in decoder
+  - Database state updates within 5 seconds of ledger confirmation
+  - Challenge events trigger dispute tracking records as required
+
+  Resolves [#932](../../issues/932)
+
+
+- Automated DB backup with S3+PITR and contract upgrade playbook ([`f06cc54`](../../commit/f06cc54b3c99a532cc887300991fc47afc38064a))
+
+Closes [#1018](../../issues/1018), closes [#1019](../../issues/1019)
+
+  ## Issue [#1018](../../issues/1018) — Automated database backup and PITR
+
+  - scripts/backup.sh: add optional S3 upload with SSE-KMS encryption and
+    STANDARD_IA storage class; add post-upload object verification; add WAL
+    archiving guidance in header comments
+  - scripts/backup-restore-test.sh (new): auto-finds newest local dump,
+    restores into a temporary database, verifies events and contracts table
+    row counts, drops the test DB on exit; documents RPO ≤ 24h / ≤ 5min
+    (WAL) and RTO ≤ 1h targets
+  - docs/backup.md: rewrite as full PITR guide covering WAL archiving setup,
+    postgresql.conf settings, archive_timeout, pg_stat_archiver verification,
+    PITR restore procedure, S3 IAM policy, restore-test cron job, and
+    cloud-provider backup comparison table
+  - .env.example: add BACKUP_S3_BUCKET, BACKUP_S3_PREFIX, BACKUP_S3_REGION
+    vars with inline documentation
+  - Makefile: add backup, backup-upload, backup-restore targets; update help
+
+  ## Issue [#1019](../../issues/1019) — Contract upgrade playbook
+
+  - docs/CONTRACT_UPGRADE_PLAYBOOK.md (new): step-by-step playbook covering
+    pre-upgrade checklist, clean WASM build and SHA-256 hash recording,
+    Testnet deploy + e2e migration tests, byte-for-byte hash identity
+    verification, mainnet multi-sig upgrade transaction, post-upgrade canary
+    smoke test, rollback procedure (re-deploy previous WASM), abort
+    contingency table, RPO/RTO and storage-migration notes
+
+
+- Network status chip and contract error toasts ([#999](../../issues/999), [#1001](../../issues/1001)) ([`5dac915`](../../commit/5dac9159607ea77ad3617f421f0225ab5074d87e))
+
+Issue [#999](../../issues/999) - Network and connection status indicator:
+  - Add useNetworkStatus hook tracking navigator.onLine + SSE health
+  - Add NetworkStatusChip component (Live/Reconnecting.../Offline) with
+    colored animated dots rendered in the Nav header
+  - Tests: 3 cases covering live, offline, reconnecting states
+
+  Issue [#1001](../../issues/1001) - Map Soroban contract error codes 21-28 to friendly toasts:
+  - Add frontend/src/lib/contract-errors.ts mapping codes 21-28 to
+    human-readable messages and actionable resolution advice
+  - Add ToastProvider/useToast in Toast.tsx for in-app notifications
+  - Add useContractError hook that catches known contract errors and
+    fires a toast; re-throws unknown errors
+  - Wrap app root with ToastProvider in main.tsx
+  - Tests: 7 cases covering all codes, unknown codes, both parse formats
+
+  Closes [#999](../../issues/999)
+  Closes [#1001](../../issues/1001)
+
+
+- Interactive BetSlip ROI calculator, mobile responsive layout, referral link generator, dark/light theme toggle ([`70a5311`](../../commit/70a5311625e2bab534ea275ba51bd64aa0ad3192))
+
+[#1005](../../issues/1005) - Add BetSlip.tsx with real-time parimutuel payout calculator:
+    - Formula: payout = (stake / (pool + stake)) * totalPool * 0.98
+    - Displays multiplier, net profit, ROI, and 2% protocol fee breakdown
+    - Stake input + range slider + quick-select chips
+    - aria-live payout breakdown updates in real time
+
+  [#1007](../../issues/1007) - Mobile responsive layout improvements:
+    - BetSlip renders as a fixed bottom-sheet drawer on viewports < 640px
+    - All interactive touch targets >= 48px (buttons, inputs, chips)
+    - Single-column layout on mobile; secondary table columns hidden
+    - CSS transform-based slide-up animation for smooth drawer open
+
+  [#1003](../../issues/1003) - Referral link generator at /referrals:
+    - Generates unique referral URL from Stellar wallet address
+    - One-click copy-to-clipboard with fallback for older browsers
+    - One-click social share: X (Twitter), Telegram, WhatsApp
+    - Pre-populated marketing copy in share URLs
+    - Dynamic OpenGraph + Twitter Card meta tags updated client-side
+    - Full og:image, og:title, og:description, twitter:card tags in index.html
+
+  [#1004](../../issues/1004) - Dark/light theme toggle:
+    - Full CSS custom property audit: --bg-primary, --bg-secondary,
+      --text-primary, --text-secondary, --border-color, --accent, etc.
+    - Explicit :root[data-theme='dark'] and :root[data-theme='light'] blocks
+    - System prefers-color-scheme sync via MediaQueryList listener
+    - localStorage persistence; system preference respected when no override
+    - Theme toggle button in Nav with accessible aria-label and emoji icons
+
+  Also fix pre-existing Home.tsx TypeScript errors (useCustom, activeFn undefined)
+
+
+- Optimistic UI updates for bet submission ([#998](../../issues/998)) ([`67036e1`](../../commit/67036e13694756cf523bd944bb3f46178d28b140))
+
+- Add Freighter wallet connect plus place_bet build/sign/submit pipeline
+  - Render the optimistic bet in wallet history and the bet slip immediately
+    after the wallet signature is confirmed
+  - Show a pending spinner on the odds preview and block double-submits while
+    a bet is in flight
+  - Reconcile optimistic state via the indexer SSE stream and RPC
+    getTransaction polling; drop the local row once the indexed event lands
+  - Roll back the optimistic row with an error toast when the transaction is
+    rejected, fails on-chain, or times out
+  - Restore the router App shell clobbered on main (missing App.css import)
+    and fix pre-existing tsc errors (ContractsPage event_count, api.test.ts
+    abort signal) so the branch typechecks clean
+
+
+- Configure one-command docker-compose local dev stack ([`7adde29`](../../commit/7adde29f74a29dfd4147289502c7248f102572f0))
+
+Bring up the full PERO-J stack with a single `docker compose up --build`,
+  addressing issue [#1016](../../issues/1016). The compose file now spins up PostgreSQL (with
+  migrations pre-applied), Redis, a Soroban local sandbox node, the indexer
+  API with hot-reload, and the frontend dev server with hot-reload, plus a
+  one-shot seed service that pre-seeds test markets and simulated user
+  accounts.
+
+
+- Optimized multi-stage production Dockerfiles for the backend ([`bf3465a`](../../commit/bf3465a77285e6e96ad0194e2e12fb8d610f64c3))
+
+Add a minimal, non-root production Docker image for the PERO-J backend
+  (indexer/API), addressing issue [#1015](../../issues/1015).
+
+  The PERO-J backend is a single Node.js service that serves the REST API,
+  polls Soroban RPC, and optionally submits decoded events on-chain (the
+  "oracle" role). One production image therefore covers the API, indexer, and
+  oracle roles — there are no separate API/oracle services to build distinct
+  images for, so separate Dockerfile.api/Dockerfile.oracle would be redundant
+  for non-existent services. The indexer is plain JavaScript run directly with
+  `node` (no TypeScript compile step), so the multi-stage build installs
+  production dependencies and copies only the runtime code.
+
+
+- Add automated staging deployment pipeline to testnet ([`f4ccf10`](../../commit/f4ccf108c4e3524e7a716b684938c63a044abcf3))
+
+Add `.github/workflows/deploy-staging.yml` which deploys the latest `main`
+  to the staging environment on Stellar testnet on every merge, addressing
+  issue [#1014](../../issues/1014).
+
+
+- Add dedicated dispute_votes table and aggregation queries ([`3c0cebd`](../../commit/3c0cebd713b5220ac364ff611849691170d28dfe))
+
+- Add oracle submitter portal and participation interface ([`4d1c395`](../../commit/4d1c395eedb2ff37ed616c6b8a21e582911020c3))
+
+- Wire orphaned handlers for claim, fee_withdrawn, and reward_points ([`7679e7d`](../../commit/7679e7da76b1f4458562d38f74ed101d7df91ad3))
+
+- Add database migration [#7](../../issues/7) for user_balances, claims, fees, and rewards tables
+  - Implement handleClaim, handleFeeWithdrawn, and handleRewardPoints
+  - Add 10 new database methods for CRUD operations on new tables
+  - Wire handlers into event processing loop with error isolation
+  - Add human-readable descriptions for new event types
+  - Create comprehensive integration test suite
+  - Add handler documentation and implementation guide
+
+  Resolves [#931](../../issues/931)
+
+
+- Reject stale adapter responses with failover ([`11fb743`](../../commit/11fb743a6a8ce4df031766e9b851c44e8c61f045))
+
+- Persist indexer ledger checkpoints atomically ([`6a5df6f`](../../commit/6a5df6f0b3940158cf32a68f562841e6568af899))
+
+- Unmapped event telemetry, Redis pub/sub, oracle signature verification and circuit breaker ([`e55b62f`](../../commit/e55b62fbc7cd8235f872e9360cfc7788ec1d74d6))
+
+Closes [#942](../../issues/942)
+  Closes [#943](../../issues/943)
+  Closes [#950](../../issues/950)
+  Closes [#952](../../issues/952)
+
+
+- Unify event routing and backfill ([`36a1d2b`](../../commit/36a1d2bca347b3da1bbe1601f70d8670b6a6100d))
+
+- Add on-chain council member registry ([`d55d33a`](../../commit/d55d33aaa0e7908ca234e5b24ca0772d4d2f2a90))
+
+Closes [#916](../../issues/916)
+
+
+- Add token burn, global bet limits, council events and BetPlaced indexer handler ([`26117b8`](../../commit/26117b83697d5d99e8d46cb3eef14cc9e13163ec))
+
+Closes [#925](../../issues/925)
+  Closes [#927](../../issues/927)
+  Closes [#928](../../issues/928)
+  Closes [#930](../../issues/930)
+
+  - ipredict-token: burn(caller, amount) with balance check, atomic supply update, ("token","burned") event
+  - market: global per-address bet count/exposure caps, global and per-market max bet, admin-configurable
+  - market: ("council","voted") and ("council","threshold_reached") events
+  - indexer: bet-placed handler, atomic bets/markets update, idempotent on (tx_hash, event_index)
+
+
+- Add oracle daemon, auto-submitter, DLQ retry worker and drift detector ([`2774d5e`](../../commit/2774d5e683b1e8292304bd6e8d24dc20b201df0f))
+
+Closes [#936](../../issues/936)
+  Closes [#937](../../issues/937)
+  Closes [#945](../../issues/945)
+  Closes [#946](../../issues/946)
+
+
+- Add market contract with claim/fee events, one-sided cancel, dispute timelock and dynamic bonds ([`b92d551`](../../commit/b92d551be34674e9f2e684bf912b1c502a0f2a3b))
+
+Closes [#913](../../issues/913)
+  Closes [#914](../../issues/914)
+  Closes [#917](../../issues/917)
+  Closes [#919](../../issues/919)
+
+
+- Implement BetPlaced cache invalidation and bond escrow invariant verification ([`4ae00bd`](../../commit/4ae00bd8206c3f54d3e003dae3512d9e8509e29c))
+
+Closes [#968](../../issues/968), Closes [#958](../../issues/958)
+
+
+- Implement cursor-based pagination and normalize /api/v1 routes ([`8815785`](../../commit/8815785cf1a0eaca8ce6e1e8336f06534500f2fe))
+
+Closes [#966](../../issues/966), Closes [#965](../../issues/965)
+
+
+- Persist resolution audit evidence ([`34d061a`](../../commit/34d061a528485e1539f873d4252f6f52d58b91ff))
+
+Add immutable audit records with raw response evidence, hashes, and public verification endpoints.
+
+
+- Monitor council inactivity ([`b5dac8c`](../../commit/b5dac8c7a912aa947664e47b9261e1656c9a2cdc))
+
+Add hourly quorum checks and PagerDuty escalation at 24h, 48h, and 60h. Resolve alerts when quorum is reached or disputes close.
+
+
+- Add oracle disputes endpoint ([`d7b3067`](../../commit/d7b3067a32c7983a079111764ecf94bb175e1773))
+
+- Batch upserts, Prometheus metrics, and reorg detection ([`3991e23`](../../commit/3991e23a5295f42f2920b8fe878306c6e1124c91))
+
+Closes [#941](../../issues/941)
+  Closes [#940](../../issues/940)
+  Closes [#935](../../issues/935)
+
+  - batch events per ledger into one transactional multi-row INSERT
+  - expose indexer_* metrics via prom-client at GET /metrics
+  - track last 32 ledger hashes in indexed_ledgers; on mismatch roll back
+    from the fork point and re-index
+
+
+- Configure database pool size ([`df7e5bb`](../../commit/df7e5bbd7b70c022f583f715bd716993b77d7f55))
+
+- Add SEP-41 token metadata endpoint ([#816](../../issues/816)) ([`77ee7d8`](../../commit/77ee7d8bd455a71a0235b348d35bef8f197496fb))
+
+- Add onchain_seq nullable column to events table ([#828](../../issues/828)) ([`02757a5`](../../commit/02757a5ed2e1e4324ee70cf1f8ac8ebefc4e9883))
+
+- onchain_seq BIGINT column declared in migration 1 (CREATE TABLE)
+  - Idempotent ALTER TABLE ADD COLUMN IF NOT EXISTS in migration 2
+  - db.upsertEvent() persists ev.onchain_seq ?? null as $10 parameter
+  - Expand README two-sentence note into a full 'Event sequence namespaces'
+    section with a comparison table documenting seq vs onchain_seq
+
+  Closes [#828](../../issues/828)
+
+
+- Add NotFound page with home link and catch-all route ([#826](../../issues/826)) ([`c5d060f`](../../commit/c5d060f7281b99e531072c641f3eeb2ded023a0b))
+
+- Add NotFound page component with 404 heading and Go to Home link
+  - Text suggests checking the URL and trying again
+  - Use semantic <main> element with aria-labelledby for accessibility
+  - Register catch-all path="*" route in App.tsx to render NotFound
+
+  Closes [#826](../../issues/826)
+
 
 - Document admin key loss recovery, add burn_from decoder, cache invalidation, and volume metadata warning ([`4ded529`](../../commit/4ded5297828e1097f9a0880d91ceb99ae2ffb0ab))
 
@@ -1132,6 +2045,8 @@ Closes [#3](../../issues/3) — Parse ScVal Types to Native JavaScript Types
 
 ### Miscellaneous
 
+- Finalize issue [#752](../../issues/752)-[#755](../../issues/755) fix tracking ([`02d8e36`](../../commit/02d8e36ab30abe8437a82e9815e39f02056d1938))
+
 - Resolve maintenance issues 372 through 375 ([`bba5bb7`](../../commit/bba5bb70d9af7c6d34d3ea26cd144952dcd01a2f))
 
 - Add governance, security, and development guidelines ([`5a1beab`](../../commit/5a1beab905033480fd579388b275e34fef45d31f))
@@ -1150,7 +2065,26 @@ Closes [#3](../../issues/3) — Parse ScVal Types to Native JavaScript Types
 
 
 
+### Performance
+
+- Configure connection pool sizing, idle timeouts, and connection recycling ([#989](../../issues/989)) ([`0a5a368`](../../commit/0a5a36859d6446ff8abc9de0dcfe839144096173))
+
+- Eliminate polling latency with push-based market streaming ([`98e9a8e`](../../commit/98e9a8e3f5a7f18333f445c12b1e8bca01301281))
+
+- Serve leaderboard from materialized view refreshed every 60s ([`2b406b4`](../../commit/2b406b4dce3bdfdbe65582ef57f4451b76bfc94d))
+
+Closes [#988](../../issues/988)
+
+
+
+### Refactoring
+
+- Add reusable BaseDataProviderClient with rate-limiting and retries ([`4c9413a`](../../commit/4c9413af2b8bb2212ba87c308d74b1bee2ac6123))
+
+
 ### Testing
+
+- Assert delegated token descriptions ([`cedb970`](../../commit/cedb9704377eb6d7c3f5d04def9f9e89736912d7))
 
 - Transfer sends amount in event data per SEP-41 ([`5d467db`](../../commit/5d467db96421d79e171922ec8155cdbdfd227e2a))
 
@@ -1198,6 +2132,50 @@ Add a tests/integration/ directory with stub tests that document the
 ### Indexer
 
 - Treat 'function not found' as missing in validateSep41 ([`8c3d338`](../../commit/8c3d338dafb16a53a8035b1db346a5ea28bc3723))
+
+
+### Infra
+
+- Add automated zero-downtime secret rotation script and runbook (closes [#1020](../../issues/1020)) ([`dcc7b91`](../../commit/dcc7b91081a165d1e7a81fdabf61a537f264b747))
+
+- Add TLS certificate expiry monitoring script and cron workflow ([#1017](../../issues/1017)) ([`f91c0b4`](../../commit/f91c0b47821bf166868a07a14793b90f399cd3e5))
+
+- Add scripts/check-tls-expiry.sh:
+      Bash script that checks TLS cert expiry for one or more HOST:PORT endpoints
+      Defaults to a 15-day warning threshold (WARN_DAYS env var)
+      Sends optional alerts via:
+        ALERT_WEBHOOK_URL – Slack / Discord / generic webhook
+        NOTIFY_EMAIL      – e-mail via the local 'mail' command
+      Exits non-zero if any certificate is expired or expires within WARN_DAYS
+
+  - Add .github/workflows/tls-monitor.yml:
+      Runs daily at 07:00 UTC via cron
+      Also dispatchable manually (workflow_dispatch) with an optional hosts override
+      Reads endpoint list from repository variable TLS_HOSTS (Settings > Variables)
+      Reads ALERT_WEBHOOK_URL and NOTIFY_EMAIL from repository secrets
+      Prints actionable error annotations when a cert is about to expire
+      Includes reminder to configure certbot renew on the production host
+
+  Closes [#1017](../../issues/1017)
+
+
+
+### Security
+
+- Add input sanitization and length limits on market fields ([#1031](../../issues/1031)) ([`2e08a8a`](../../commit/2e08a8a0490b6f195126cac09f532324cd2e9226))
+
+- Conduct formal invariant audit for contract balance vs betting pool and fees ([#1029](../../issues/1029)) ([`9fa74ba`](../../commit/9fa74ba8e5deaf5a707e5604fc91422f18096579))
+
+- Implement CORS and security headers policy (CSP, HSTS, X-Frame-Options) ([#1032](../../issues/1032)) ([`62bdf45`](../../commit/62bdf450f99204761e6218b770a647f4c488c8d1))
+
+- Add slippage protection for user bets placed during rapid odds fluctuations ([#1033](../../issues/1033)) ([`b995e72`](../../commit/b995e72c0bec4bae057aa5201919628bfa286c1f))
+
+- Block destructive SQL statements from merging into main ([`69d7254`](../../commit/69d72548e1056b5f84ad6853c97e029e87a5c15f))
+
+
+### Simple
+
+- Batch fix 2 issues ([`390edc7`](../../commit/390edc779477f721026317308d512239d695f4bc))
 
 
 

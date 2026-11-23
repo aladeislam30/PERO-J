@@ -18,6 +18,7 @@ pub enum Error {
     AlreadyExists     = 3,
     LimitExceeded     = 4,
     NotInitialized    = 5,
+    SlippageExceeded  = 6,
 }
 
 // ── Input limits ─────────────────────────────────────────────────────────────
@@ -37,6 +38,13 @@ pub const MAX_FUNCTIONS: u32 = 64;
 /// Largest number of parameters accepted per function.
 pub const MAX_PARAMS: u32 = 32;
 
+/// Maximum length for market/contract question and title strings (<= 160 characters).
+pub const MAX_TITLE_LEN: u32 = 160;
+/// Maximum length for market/contract description string (<= 1000 characters).
+pub const MAX_MARKET_DESC_LEN: u32 = 1000;
+/// Maximum length for external evidence source URL (<= 256 characters).
+pub const MAX_URL_LEN: u32 = 256;
+
 // ── Storage keys ─────────────────────────────────────────────────────────────
 #[contracttype]
 pub enum DataKey {
@@ -46,6 +54,15 @@ pub enum DataKey {
     EventLog(u64),              // seq → DecodedEvent
     EventSeq,
     IndexerAllowlist,       // → Vec<Address> of trusted event submitters
+    MarketPool(u64),        // market_id → MarketPool
+}
+
+/// Parimutuel market betting pool totals.
+#[contracttype]
+#[derive(Clone, Default)]
+pub struct MarketPool {
+    pub total_yes: i128,
+    pub total_no:  i128,
 }
 
 // ── Limits & TTL ──────────────────────────────────────────────────────────────
@@ -58,6 +75,9 @@ pub const MAX_PAGE: u32 = 200;
 /// Maximum number of addresses that may sit on the indexer allowlist.
 pub const MAX_INDEXERS: u32 = 20;
 
+/// Maximum number of council members.
+pub const MAX_COUNCIL_MEMBERS: u32 = 20;
+
 const DAY_IN_LEDGERS: u32 = 17_280;
 /// Extend an entry whenever its remaining TTL drops below 30 days …
 const TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
@@ -65,6 +85,15 @@ const TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
 const TTL_EXTEND_TO: u32 = 90 * DAY_IN_LEDGERS;
 
 // ── Data types ────────────────────────────────────────────────────────────────
+
+/// Dispute-resolution council: member set and M-of-N approval threshold.
+/// Invariant: `members.len() == 0` or `1 <= threshold <= members.len()`.
+#[contracttype]
+#[derive(Clone)]
+pub struct CouncilConfig {
+    pub members:   Vec<Address>,
+    pub threshold: u32,
+}
 
 /// ABI-like metadata for a registered contract.
 #[contracttype]
@@ -152,6 +181,31 @@ impl ExplorerContract {
             .unwrap_or_else(|| panic_with_error!(env, Error::NotFound))
     }
 
+    fn load_council(env: &Env) -> CouncilConfig {
+        env.storage().persistent().get(&DataKey::Council).unwrap_or(CouncilConfig {
+            members: Vec::new(env),
+            threshold: 0,
+        })
+    }
+
+    fn council_for_admin(env: &Env, admin: &Address) -> CouncilConfig {
+        admin.require_auth();
+        if *admin != Self::admin(env) {
+            panic_with_error!(env, Error::Unauthorized);
+        }
+        Self::load_council(env)
+    }
+
+    fn save_council(env: &Env, cfg: &CouncilConfig, who: Address, action: Symbol) {
+        env.storage().persistent().set(&DataKey::Council, cfg);
+        env.storage().persistent().extend_ttl(&DataKey::Council, TTL_THRESHOLD, TTL_EXTEND_TO);
+        Self::bump_ttl(env);
+        env.events().publish(
+            (symbol_short!("council"), Symbol::new(env, "member_updated")),
+            (who, action, cfg.threshold),
+        );
+    }
+
     /// Bump the TTL of the instance entry and of the admin entry.
     ///
     /// Called from every mutating entry point so that an active contract can
@@ -173,6 +227,12 @@ impl ExplorerContract {
     /// from both `register_contract` and `update_contract` so the check is not
     /// duplicated.
     fn validate_meta(env: &Env, meta: &ContractMeta) {
+        if meta.name.len() > MAX_TITLE_LEN {
+            panic_with_error!(env, Error::LimitExceeded);
+        }
+        if meta.description.len() > MAX_MARKET_DESC_LEN {
+            panic_with_error!(env, Error::LimitExceeded);
+        }
         if meta.functions.len() > MAX_FUNCTIONS {
             panic_with_error!(env, Error::LimitExceeded);
         }
@@ -183,14 +243,25 @@ impl ExplorerContract {
         }
     }
 
-    /// Read the next event sequence number from instance storage.
+    /// Validate market question/title and description string lengths and external URL.
+    pub fn validate_market_input(env: &Env, title: &String, description: &String, source_url: &String) {
+        if title.len() > MAX_TITLE_LEN
+            || description.len() > MAX_MARKET_DESC_LEN
+            || source_url.len() > MAX_URL_LEN
+        {
+            panic_with_error!(env, Error::LimitExceeded);
+        }
+    }
+
+    /// Read the next event sequence number from persistent storage.
     ///
     /// Panics with `NotInitialized` if the counter is missing, which means
     /// `init` has not been called yet.
     fn event_seq(env: &Env) -> u64 {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::EventSeq)
+            .or_else(|| env.storage().instance().get(&DataKey::EventSeq))
             .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
     }
 
@@ -227,7 +298,10 @@ impl ExplorerContract {
             panic_with_error!(&env, Error::AlreadyExists);
         }
         env.storage().persistent().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::EventSeq, &0u64);
+        env.storage().persistent().set(&DataKey::EventSeq, &0u64);
+        env.storage().persistent().extend_ttl(
+            &DataKey::EventSeq, EVENTSEQ_TTL_THRESHOLD, EVENTSEQ_TTL_BUMP,
+        );
         Self::bump_ttl(&env);
     }
 
@@ -337,6 +411,55 @@ impl ExplorerContract {
         allowlist.contains(&address)
             || env.storage().persistent().get::<_, Address>(&DataKey::Admin)
                   .map_or(false, |a| a == address)
+    }
+
+    // ── Council registry ──────────────────────────────────────────────────────
+
+    /// Add `new_member` to the council. The first member sets the threshold to 1.
+    pub fn add_council_member(env: Env, admin: Address, new_member: Address) {
+        let mut cfg = Self::council_for_admin(&env, &admin);
+        if cfg.members.contains(&new_member) {
+            panic_with_error!(&env, Error::AlreadyExists);
+        }
+        if cfg.members.len() >= MAX_COUNCIL_MEMBERS {
+            panic_with_error!(&env, Error::LimitExceeded);
+        }
+        cfg.members.push_back(new_member.clone());
+        if cfg.threshold == 0 {
+            cfg.threshold = 1;
+        }
+        Self::save_council(&env, &cfg, new_member, symbol_short!("added"));
+    }
+
+    /// Remove `member`; fails if the remaining members would fall below the threshold.
+    pub fn remove_council_member(env: Env, admin: Address, member: Address) {
+        let mut cfg = Self::council_for_admin(&env, &admin);
+        let idx = cfg.members
+            .first_index_of(&member)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::NotFound));
+        if cfg.members.len() - 1 < cfg.threshold {
+            panic_with_error!(&env, Error::InvalidThreshold);
+        }
+        cfg.members.remove(idx);
+        if cfg.members.is_empty() {
+            cfg.threshold = 0;
+        }
+        Self::save_council(&env, &cfg, member, symbol_short!("removed"));
+    }
+
+    /// Set the approval threshold; must satisfy `1 <= threshold <= members.len()`.
+    pub fn set_council_threshold(env: Env, admin: Address, threshold: u32) {
+        let mut cfg = Self::council_for_admin(&env, &admin);
+        if threshold == 0 || threshold > cfg.members.len() {
+            panic_with_error!(&env, Error::InvalidThreshold);
+        }
+        cfg.threshold = threshold;
+        Self::save_council(&env, &cfg, admin, symbol_short!("thresh"));
+    }
+
+    /// Current council members and threshold.
+    pub fn get_council(env: Env) -> CouncilConfig {
+        Self::load_council(&env)
     }
 
     // ── Contract Registry ─────────────────────────────────────────────────────
@@ -453,15 +576,16 @@ impl ExplorerContract {
             raw_topics,
             raw_data,
         };
-        env.storage().persistent().set(&DataKey::EventLog(seq), &event);
-        env.storage().persistent().extend_ttl(&DataKey::EventLog(seq), EVENT_TTL_MIN, EVENT_TTL_MAX);
-        env.storage().instance().set(&DataKey::EventSeq, &(seq + 1));
-        Self::bump_ttl(&env);
 
         env.events().publish(
             (symbol_short!("decoded"), contract_id, function),
             description,
         );
+
+        env.storage().persistent().set(&DataKey::EventLog(seq), &event);
+        env.storage().persistent().extend_ttl(&DataKey::EventLog(seq), EVENT_TTL_MIN, EVENT_TTL_MAX);
+        env.storage().instance().set(&DataKey::EventSeq, &(seq + 1));
+        Self::bump_ttl(&env);
     }
 
     /// Fetch a single decoded event by sequence number.
@@ -490,7 +614,7 @@ impl ExplorerContract {
         if limit > MAX_PAGE {
             panic_with_error!(&env, Error::LimitExceeded);
         }
-        let total: u64 = env.storage().instance().get(&DataKey::EventSeq).unwrap_or(0);
+        let total: u64 = env.storage().persistent().get(&DataKey::EventSeq).unwrap_or(0);
         let mut out: Vec<DecodedEvent> = Vec::new(&env);
         let end = from.saturating_add(limit as u64).min(total);
         for seq in from..end {
@@ -500,6 +624,90 @@ impl ExplorerContract {
         }
         out
     }
+
+    // ── Prediction Market & Slippage Protection ──────────────────────────────
+
+    /// Calculate parimutuel odds in basis points (1 to 10,000, representing 0.01% to 100.00%).
+    /// If pool is empty, returns balanced default of 5,000 bps (50.00%).
+    pub fn compute_odds(total_yes: i128, total_no: i128, is_yes: bool) -> u32 {
+        let total = total_yes.saturating_add(total_no);
+        if total <= 0 {
+            return 5000;
+        }
+        let pool = if is_yes { total_yes } else { total_no };
+        if pool <= 0 {
+            return 1;
+        }
+        let odds = (pool.saturating_mul(10000)) / total;
+        odds.min(10000) as u32
+    }
+
+    /// Place a bet with slippage protection.
+    ///
+    /// `min_acceptable_odds`: Minimum acceptable odds in basis points (e.g. 6500 = 65.00%).
+    /// If current market odds are lower than `min_acceptable_odds`, the transaction reverts
+    /// with `Error::SlippageExceeded` to protect users against sandwiching or sudden odds shifts.
+    pub fn place_bet(
+        env: Env,
+        caller: Address,
+        market_id: u64,
+        is_yes: bool,
+        amount: i128,
+        min_acceptable_odds: u32,
+    ) -> u32 {
+        caller.require_auth();
+
+        if amount <= 0 {
+            panic_with_error!(&env, Error::LimitExceeded);
+        }
+
+        let pool_key = DataKey::MarketPool(market_id);
+        let mut pool: MarketPool = env
+            .storage()
+            .persistent()
+            .get(&pool_key)
+            .unwrap_or(MarketPool { total_yes: 0, total_no: 0 });
+
+        let current_odds = Self::compute_odds(pool.total_yes, pool.total_no, is_yes);
+
+        if current_odds < min_acceptable_odds {
+            panic_with_error!(&env, Error::SlippageExceeded);
+        }
+
+        if is_yes {
+            pool.total_yes = pool.total_yes.saturating_add(amount);
+        } else {
+            pool.total_no = pool.total_no.saturating_add(amount);
+        }
+
+        env.storage().persistent().set(&pool_key, &pool);
+        Self::bump_ttl(&env);
+
+        env.events().publish(
+            (symbol_short!("bet"), market_id, caller),
+            (is_yes, amount, current_odds),
+        );
+
+        current_odds
+    }
+
+    /// Return current market odds in basis points for an outcome.
+    pub fn get_odds(env: Env, market_id: u64, is_yes: bool) -> u32 {
+        let pool: MarketPool = env
+            .storage()
+            .persistent()
+            .get(&DataKey::MarketPool(market_id))
+            .unwrap_or(MarketPool { total_yes: 0, total_no: 0 });
+        Self::compute_odds(pool.total_yes, pool.total_no, is_yes)
+    }
+
+    /// Return pool totals for a market.
+    pub fn get_pool(env: Env, market_id: u64) -> MarketPool {
+        env.storage()
+            .persistent()
+            .get(&DataKey::MarketPool(market_id))
+            .unwrap_or(MarketPool { total_yes: 0, total_no: 0 })
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -507,7 +715,10 @@ impl ExplorerContract {
 mod tests {
     use super::*;
     use soroban_sdk::{
-        testutils::{storage::Instance as _, Address as _, Events as _, Ledger as _},
+        testutils::{
+            storage::{Instance as _, Persistent as _},
+            Address as _, Events as _, Ledger as _,
+        },
         Env, IntoVal, TryFromVal,
     };
 
@@ -562,6 +773,15 @@ mod tests {
             &Bytes::new(&env),
         );
 
+        let (_, topics, data) = env.events().all().last().unwrap();
+        assert_eq!(
+            topics,
+            (symbol_short!("decoded"), cid.clone(), symbol_short!("swap")).into_val(&env),
+        );
+        assert_eq!(
+            String::try_from_val(&env, &data).unwrap(),
+            String::from_str(&env, "Address GABC... swapped 100 USDC → 98.7 XLM on StellarSwap"),
+        );
         assert_eq!(client.event_count(), 1u64);
         let ev = client.get_event(&0u64);
         assert_eq!(ev.ledger, 4521983u32);
@@ -680,7 +900,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Error(Contract, #4)")]
     fn test_submit_event_oversized_raw_data_panics() {
         let (env, client) = setup!();
         let admin = Address::generate(&env);
@@ -792,7 +1012,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Error(Contract, #2)")]
     fn test_transfer_admin_wrong_caller_panics() {
         let (env, client) = setup!();
         let admin    = Address::generate(&env);
@@ -800,6 +1020,50 @@ mod tests {
         client.init(&admin);
         // attacker tries to hijack admin — must panic
         client.transfer_admin(&attacker, &attacker);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_transfer_admin_requires_auth() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        let new_admin = Address::generate(&env);
+        client.init(&admin);
+
+        env.set_auths(&[]);
+        client.transfer_admin(&admin, &new_admin);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_submit_event_requires_auth() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        env.set_auths(&[]);
+        let cid: BytesN<32> = BytesN::from_array(&env, &[12u8; 32]);
+        client.submit_event(
+            &admin,
+            &cid,
+            &symbol_short!("swap"),
+            &1u32,
+            &String::from_str(&env, "must require authorization"),
+            &Vec::new(&env),
+            &Bytes::new(&env),
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_add_indexer_requires_admin_auth() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        let indexer = Address::generate(&env);
+        client.init(&admin);
+
+        env.set_auths(&[]);
+        client.add_indexer(&admin, &indexer);
     }
 
     // ── #1 — init is permanently irreversible ────────────────────────────────
@@ -813,10 +1077,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "Error(Contract, #3)")]
     fn test_init_is_irreversible_without_instance_entry() {
-        let env = Env::default();
-        env.mock_all_auths();
-        let id = env.register_contract(None, ExplorerContract);
-        let client = ExplorerContractClient::new(&env, &id);
+        let (env, client) = setup!();
+        let id = client.address.clone();
 
         let admin    = Address::generate(&env);
         let attacker = Address::generate(&env);
@@ -854,6 +1116,43 @@ mod tests {
         // TTL was pushed well past the 30-day bump threshold.
         let ttl = env.as_contract(&client.address, || env.storage().instance().get_ttl());
         assert!(ttl >= TTL_THRESHOLD, "instance ttl {} not bumped", ttl);
+    }
+
+    #[test]
+    fn test_event_seq_survives_instance_ttl_expiry() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let cid: BytesN<32> = BytesN::from_array(&env, &[14u8; 32]);
+        client.submit_event(
+            &admin,
+            &cid,
+            &symbol_short!("swap"),
+            &1u32,
+            &String::from_str(&env, "first event"),
+            &Vec::new(&env),
+            &Bytes::new(&env),
+        );
+
+        // Model the instance entry expiring while the persistent counter remains.
+        env.as_contract(&client.address, || {
+            env.storage().instance().remove(&DataKey::EventSeq);
+        });
+
+        client.submit_event(
+            &admin,
+            &cid,
+            &symbol_short!("swap"),
+            &2u32,
+            &String::from_str(&env, "second event"),
+            &Vec::new(&env),
+            &Bytes::new(&env),
+        );
+
+        assert_eq!(client.event_count(), 2u64);
+        assert_eq!(client.get_event(&0u64).seq, 0u64);
+        assert_eq!(client.get_event(&1u64).seq, 1u64);
     }
 
     // ── #2 — indexer allowlist ───────────────────────────────────────────────
@@ -934,6 +1233,67 @@ mod tests {
         assert_eq!(client.get_events(&0u64, &MAX_PAGE).len(), 0);
     }
 
+    #[test]
+    fn test_get_events_limit_zero_returns_empty() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        client.init(&admin);
+        let cid: BytesN<32> = BytesN::from_array(&env, &[15u8; 32]);
+        client.submit_event(
+            &admin,
+            &cid,
+            &symbol_short!("swap"),
+            &1u32,
+            &String::from_str(&env, "event"),
+            &Vec::new(&env),
+            &Bytes::new(&env),
+        );
+
+        assert_eq!(client.get_events(&0u64, &0u32).len(), 0);
+    }
+
+    #[test]
+    fn test_get_events_from_equals_total_returns_empty() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        client.init(&admin);
+        let cid: BytesN<32> = BytesN::from_array(&env, &[16u8; 32]);
+        client.submit_event(
+            &admin,
+            &cid,
+            &symbol_short!("swap"),
+            &1u32,
+            &String::from_str(&env, "event"),
+            &Vec::new(&env),
+            &Bytes::new(&env),
+        );
+
+        assert_eq!(client.get_events(&1u64, &MAX_PAGE).len(), 0);
+    }
+
+    #[test]
+    fn test_get_events_from_last_returns_one() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        client.init(&admin);
+        let cid: BytesN<32> = BytesN::from_array(&env, &[17u8; 32]);
+        for ledger in 1..=2 {
+            client.submit_event(
+                &admin,
+                &cid,
+                &symbol_short!("swap"),
+                &ledger,
+                &String::from_str(&env, "event"),
+                &Vec::new(&env),
+                &Bytes::new(&env),
+            );
+        }
+
+        let events = client.get_events(&1u64, &MAX_PAGE);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events.get(0).unwrap().seq, 1u64);
+    }
+
     // ── #4 — update_contract emits an event ──────────────────────────────────
 
     #[test]
@@ -967,5 +1327,66 @@ mod tests {
             String::from_str(&env, "StellarSwap v2"),
         );
         assert_eq!(client.get_contract(&cid).name, String::from_str(&env, "StellarSwap v2"));
+    }
+
+    // ── Input length limit tests ─────────────────────────────────────────────
+
+    #[test]
+    #[should_panic]
+    fn test_register_contract_rejects_oversized_title() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        client.init(&admin);
+        let cid: BytesN<32> = BytesN::from_array(&env, &[18u8; 32]);
+        // 161 characters (exceeds MAX_TITLE_LEN = 160)
+        let buf = [b'a'; 161];
+        let long_title = core::str::from_utf8(&buf).unwrap();
+        let meta = ContractMeta {
+            name: String::from_str(&env, long_title),
+            description: String::from_str(&env, "valid description"),
+            functions: Vec::new(&env),
+            registered_by: admin.clone(),
+        };
+        client.register_contract(&admin, &cid, &meta);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_register_contract_rejects_oversized_description() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        client.init(&admin);
+        let cid: BytesN<32> = BytesN::from_array(&env, &[19u8; 32]);
+        // 1001 bytes (exceeds MAX_MARKET_DESC_LEN = 1000)
+        let buf = [b'b'; 1001];
+        let long_desc = core::str::from_utf8(&buf).unwrap();
+        let meta = ContractMeta {
+            name: String::from_str(&env, "Valid Title"),
+            description: String::from_str(&env, long_desc),
+            functions: Vec::new(&env),
+            registered_by: admin.clone(),
+        };
+        client.register_contract(&admin, &cid, &meta);
+    }
+
+    #[test]
+    fn test_register_contract_accepts_boundary_limits() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        client.init(&admin);
+        let cid: BytesN<32> = BytesN::from_array(&env, &[20u8; 32]);
+        let buf_title = [b'c'; 160];
+        let title_160 = core::str::from_utf8(&buf_title).unwrap();
+        let buf_desc = [b'd'; 1000];
+        let desc_1000 = core::str::from_utf8(&buf_desc).unwrap();
+        let meta = ContractMeta {
+            name: String::from_str(&env, title_160),
+            description: String::from_str(&env, desc_1000),
+            functions: Vec::new(&env),
+            registered_by: admin.clone(),
+        };
+        client.register_contract(&admin, &cid, &meta);
+        let fetched = client.get_contract(&cid);
+        assert_eq!(fetched.name, String::from_str(&env, title_160));
     }
 }

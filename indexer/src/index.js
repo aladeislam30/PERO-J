@@ -3,10 +3,12 @@ import { SorobanRpc, StrKey } from "@stellar/stellar-sdk";
 import { startApi } from "./api.js";
 import { db } from "./db.js";
 import { registerFixtures } from "./registerFixtures.js";
-import { decode, evictContractMeta } from "./decoder.js";
 import { reloadSacMap } from "./sac.js";
 import { validateNetwork } from "./validateNetwork.js";
-import { submitEvent } from "./contract.js";
+import { resolvePollMs } from "./resolvePollMs.js";
+import { handleOracleSubmission } from "./handlers/oracle_submission.js";
+import { handleOracleDispute } from "./handlers/oracle_dispute.js";
+import { handleOracleFinalized } from "./handlers/oracle_finalized.js";
 
 dotenv.config();
 
@@ -14,9 +16,17 @@ dotenv.config();
 
 const RPC_URL = process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org";
 const START_LEDGER = Number(process.env.START_LEDGER || 0);
-const POLL_MS = Number(process.env.POLL_MS || 5000);
+const POLL_MS = resolvePollMs();
+const LEADERBOARD_REFRESH_MS = 60_000;
 const RPC_ERROR_THRESHOLD = 3;
-const EXPLORER_CONTRACT_ID = process.env.SOROBAN_EXPLORER_CONTRACT_ID;
+
+/**
+ * Advisory lock id for the single active writer. Only the instance holding
+ * it polls the RPC and writes; others stand by and take over on release.
+ */
+const INDEXER_LOCK_ID = 837;
+const WRITER_STANDBY_POLL_MS = 5000;
+const WRITER_HEARTBEAT_MS = 5000;
 
 let rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 
@@ -35,15 +45,80 @@ export const health = {
   startedAt: Date.now(),
 };
 
-async function indexLedger(ledger) {
-  // getEvents supports cursor-based pagination; we use ledger range here
-  const res = await rpc.getEvents({
-    startLedger: ledger,
-    filters: [{ type: "contract" }],
-    limit: 200,
-  });
+/**
+ * Recursively walk decoded topic/data values and collect every Stellar
+ * public key (strkey `G…`, 56 chars) found in the structure.
+ *
+ * Handles nested arrays and plain objects so addresses embedded in
+ * structs, vectors, and maps are all discovered.
+ *
+ * @param {*} values - Decoded value(s) to scan.
+ * @param {Set<string>} [found] - Accumulator for deduplication.
+ * @returns {string[]} Deduplicated list of Stellar public keys.
+ */
+export function extractAddresses(values, found = new Set()) {
+  if (values === null || values === undefined) {
+    return [...found];
+  }
 
-  for (const ev of res.events) {
+  if (typeof values === "string") {
+    if (values.length === 56 && values.startsWith("G")) {
+      try {
+        if (StrKey.isValidEd25519PublicKey(values)) {
+          found.add(values);
+        }
+      } catch {
+        // Not a valid strkey — ignore.
+      }
+    }
+    return [...found];
+  }
+
+  if (Array.isArray(values)) {
+    for (const item of values) {
+      extractAddresses(item, found);
+    }
+    return [...found];
+  }
+
+  if (typeof values === "object") {
+    for (const value of Object.values(values)) {
+      extractAddresses(value, found);
+    }
+  }
+
+  return [...found];
+}
+
+export async function indexLedger(ledger, rpcClient = rpc) {
+  const latestLedger = await rpcClient.getLatestLedger();
+  const events = [];
+  let cursor;
+  while (true) {
+    const res = await rpcClient.getEvents({
+      startLedger: ledger,
+      cursor,
+      filters: [{ type: "contract" }],
+      limit: 200,
+    });
+    if (res.latestLedger !== latestLedger.sequence) {
+      throw new Error(
+        `RPC ledger changed during event fetch (${res.latestLedger} -> ${latestLedger.sequence}); retrying`
+      );
+    }
+    events.push(...res.events);
+    if (res.events.length < 200) {
+      break;
+    }
+    const nextCursor = res.events.at(-1)?.pagingToken;
+    if (!nextCursor || nextCursor === cursor) {
+      throw new Error("RPC event pagination did not advance; retrying");
+    }
+    cursor = nextCursor;
+  }
+
+  const decodedEvents = [];
+  for (const ev of events) {
     // On-chain `update` events from the explorer contract let us invalidate
     // the in-memory ABI cache immediately, instead of waiting for the 60s LRU
     // TTL to expire, so an ABI update is reflected near-instantly.
@@ -52,23 +127,87 @@ async function indexLedger(ledger) {
       if (targetContractId) {
         evictContractMeta(targetContractId);
       }
-      continue;
     }
 
-    const decoded = await decode(ev);
-    const onchain_seq = await submitEvent(decoded);
-    if (onchain_seq !== null) {
-      decoded.onchain_seq = onchain_seq;
+    const nextCursor = res.cursor;
+    if (
+      reachedEndLedger ||
+      res.events.length === 0 ||
+      !nextCursor ||
+      nextCursor === paginationCursor
+    ) {
+      break;
     }
     await db.upsertEvent(decoded);
+    // Fire-and-forget after commit: Redis failures never block indexing.
+    void publish(`stellar:events:${decoded.function}`, {
+      type: decoded.function,
+      market_id: decoded.contract_id,
+      timestamp: new Date().toISOString(),
+      state: { ledger: decoded.ledger, tx_hash: decoded.tx_hash, description: decoded.description },
+    });
     console.log(`[${ev.ledger}] ${decoded.function}: ${decoded.description}`);
+
+    // Route oracle events to their handlers
+    const topics = ev.topic.map((t) => {
+      try {
+        return typeof t.sym === "function" ? t.sym() : t.value?.()?.sym?.() ?? String(t);
+      } catch {
+        return String(t);
+      }
+    });
+    
+    const data = ev.value;
+
+    if (decoded.function === "oracle_submission") {
+      await handleOracleSubmission(decoded, topics, data);
+    } else if (decoded.function === "oracle_dispute") {
+      await handleOracleDispute(decoded, topics, data);
+    } else if (decoded.function === "oracle_finalized") {
+      await handleOracleFinalized(decoded, topics, data);
+    }
   }
+
+  // Commit the whole ledger batch atomically in a single transaction.
+  await db.upsertEvents(batch);
+  for (const decoded of batch) {
+    console.log(`[${decoded.ledger}] ${decoded.function}: ${decoded.description}`);
+  }
+  eventsProcessed.inc(batch.length);
 
   // Record the time we finished processing this ledger batch
   health.lastIndexedAt = Date.now();
-  health.lastLedger = res.latestLedger;
+  health.lastLedger = latestLedger.sequence;
 
-  return res.latestLedger;
+  return latestLedger.sequence;
+}
+
+/**
+ * Route an unparseable event to the dead-letter table with the failure reason.
+ * Never throws, so a bad event cannot crash the ingestion loop.
+ *
+ * @param {object} ev - Raw event object
+ * @param {string} reason
+ */
+async function sendToDeadLetter(ev, reason) {
+  console.warn(`[dlq] ledger=${ev?.ledger} tx=${ev?.txHash}: ${reason}`);
+  try {
+    let raw;
+    try {
+      raw = JSON.stringify(ev, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+    } catch {
+      raw = String(ev);
+    }
+    await db.insertDeadLetter({
+      contract_id: typeof ev?.contractId === "string" ? ev.contractId : undefined,
+      ledger: ev?.ledger,
+      tx_hash: typeof ev?.txHash === "string" ? ev.txHash : undefined,
+      reason,
+      raw_event: raw,
+    });
+  } catch (err) {
+    console.error("[dlq] failed to persist dead-letter event:", err.message);
+  }
 }
 
 /**
@@ -81,7 +220,7 @@ async function indexLedger(ledger) {
  * @param {object} ev - Raw event object from SorobanRpc.getEvents()
  * @returns {boolean}
  */
-function isExplorerUpdateEvent(ev) {
+export function isExplorerUpdateEvent(ev) {
   if (!EXPLORER_CONTRACT_ID || ev.contractId !== EXPLORER_CONTRACT_ID) {
     return false;
   }
@@ -90,39 +229,26 @@ function isExplorerUpdateEvent(ev) {
     return false;
   }
   try {
-    return topic.value()?.sym() === "update";
+    const symbol =
+      typeof topic.sym === "function" ? topic.sym() : topic.value?.()?.sym();
+    return symbol === "update";
   } catch {
     return false;
   }
 }
 
-/**
- * Extract the strkey contract id (C…) of the contract whose ABI was updated
- * from an explorer `update` event, or null if it cannot be recovered.
- *
- * @param {object} ev - Raw event object from SorobanRpc.getEvents()
- * @returns {string|null}
- */
-function updateEventContractId(ev) {
-  const topic = ev.topic?.[1];
-  if (!topic) {
-    return null;
-  }
-  try {
-    const bytes = topic.bytes();
-    return StrKey.encodeContract(bytes);
-  } catch {
-    return null;
-  }
+  return onlyLedger ?? latestLedger;
 }
 
 let shuttingDown = false;
+let stopCouncilInactivityMonitor;
 
 function gracefulShutdown() {
   if (shuttingDown) {
     return;
   }
   shuttingDown = true;
+  stopCouncilInactivityMonitor?.();
   console.log("Shutdown signal received, finishing current iteration…");
 }
 
@@ -134,31 +260,72 @@ process.on("SIGHUP", () => {
   reloadSacMap();
 });
 
-async function run() {
+/**
+ * Run migrations before starting the API/poller.
+ *
+ * `db.init()` acquires its own Postgres advisory lock internally (see db.js),
+ * so two indexer instances starting concurrently cannot run migrations at the
+ * same time. There is no need for an additional outer lock here.
+ */
+async function runMigrations() {
   await db.init();
+}
+
+async function run() {
+  await runMigrations();
   await registerFixtures().catch((err) => {
     console.error("[fixtures] failed to register ABI fixtures:", err.message);
   });
+
   startApi();
 
+  const stopDlqWorker = startDlqRetryWorker(db, (payload) => db.upsertEvent(payload));
+  const stopDriftDetector = startDriftDetector(db);
+
   await validateNetwork(rpc);
+
+  const councilMonitorConfig = getCouncilInactivityConfig();
+  if (councilMonitorConfig) {
+    stopCouncilInactivityMonitor = startCouncilInactivityMonitor({
+      fetchActive: oracleDisputes.fetchActive,
+      config: councilMonitorConfig,
+    });
+    console.log("[oracle monitor] council inactivity monitoring enabled");
+  } else {
+    console.warn(
+      "[oracle monitor] disabled: configure ORACLE_CONTRACT_ID, PAGERDUTY_ROUTING_KEY, and ORACLE_COUNCIL_ROSTER",
+    );
+  }
 
   const persisted = await db.getCursor();
   let cursor = persisted ?? (START_LEDGER || (await rpc.getLatestLedger()).sequence - 100);
   if (persisted !== null) {
-    console.log(`Resuming from persisted ledger ${cursor}`);
+    console.log(`Resuming after persisted ledger ${persisted}`);
   }
 
   let consecutiveErrors = 0;
 
   while (!shuttingDown) {
     try {
+      const forkLedger = await detectReorg((start, limit) =>
+        fetchLedgerHashes(RPC_URL, start, limit)
+      );
+      if (forkLedger !== null) {
+        console.warn(`[reorg] ledger hash mismatch at ${forkLedger} — rolling back and re-indexing`);
+        await db.rollbackToLedger(forkLedger);
+        cursor = forkLedger;
+      }
+
       const latest = await indexLedger(cursor);
+      const hashes = await fetchLedgerHashes(RPC_URL, latest, 1);
+      if (hashes.has(latest)) {
+        await db.recordLedger(latest, hashes.get(latest), REORG_WINDOW);
+      }
       cursor = latest + 1;
-      await db.setCursor(latest);
       consecutiveErrors = 0;
     } catch (err) {
       consecutiveErrors++;
+      errors.inc();
       console.error("Indexer error:", err.message);
       if (consecutiveErrors >= RPC_ERROR_THRESHOLD) {
         console.warn(`${consecutiveErrors} consecutive RPC errors — recreating RPC client`);
@@ -169,8 +336,10 @@ async function run() {
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
+  stopDlqWorker();
+  stopDriftDetector();
   await db.close();
-  process.exit(0);
+  process.exit(lockLost ? 1 : 0);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

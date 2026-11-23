@@ -1,106 +1,31 @@
-# Contributing to PERO-J
+# Contributing
 
-Thank you for your interest in contributing to PERO-J! This document outlines how to set up your development environment, submit changes, and follow our coding standards.
+Thanks for your interest in contributing! This document describes the process for opening issues and submitting pull requests.
 
-## Code of Conduct
+## Reporting Issues
 
-By participating in this project, you agree to maintain a respectful and inclusive community. We have zero tolerance for harassment or discrimination.
+Before opening a new issue, please search existing issues to avoid duplicates. When opening an issue, use the appropriate issue template if one is available (see `.github/ISSUE_TEMPLATE/`). Include a clear description, steps to reproduce, expected vs. actual behavior, and your environment where relevant.
 
-## Getting Started
+## Branch Naming
 
-### Prerequisites
+Create a branch off `main` using a short, descriptive name prefixed by the type of change:
 
-- Rust + `wasm32-unknown-unknown` target
-- [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli)
-- Node.js ≥ 20
-- PostgreSQL ≥ 14
-- Git
+- `feat/<short-description>` — new feature
+- `fix/<short-description>` — bug fix
+- `docs/<short-description>` — documentation only
+- `chore/<short-description>` — maintenance, tooling, dependencies
+- `refactor/<short-description>` — code change that neither fixes a bug nor adds a feature
 
-### Development Setup
+Example: `fix/contracts-page-pagination`.
 
-1. **Fork and clone the repository**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/PERO-J.git
-   cd PERO-J
-   ```
+## Commit Style
 
-2. **Copy and configure environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` with your local test RPC URL and PostgreSQL connection string.
+We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-3. **Install dependencies**
-   ```bash
-   make install
-   ```
-
-4. **Build and test the contract**
-   ```bash
-   make build
-   make test
-   ```
-
-5. **Start the development stack**
-   ```bash
-   make dev
-   ```
-   This runs the indexer and frontend in parallel. The frontend is available at `http://localhost:5173`.
-
-## Branch Naming Convention
-
-Use descriptive branch names with the following prefixes:
-
-| Prefix | Purpose | Example |
-|--------|---------|---------|
-| `feat/` | New feature | `feat/add-token-search` |
-| `fix/` | Bug fix | `fix/decoder-overflow` |
-| `chore/` | Maintenance, deps, docs | `chore/update-dependencies` |
-| `test/` | Test additions or fixes | `test/add-decoder-coverage` |
-| `refactor/` | Code refactoring | `refactor/extract-decoder-logic` |
-| `docs/` | Documentation only | `docs/api-examples` |
-
-Use lowercase letters, hyphens, and be concise (< 50 characters).
-
-## How to add a new event decoder
-
-Event descriptions are built in [`indexer/src/decoder.js`](indexer/src/decoder.js).
-Add a case to `buildDescription` when a registered ABI function needs a
-human-readable description. For example, a `claim` event whose topics contain
-the claimant and amount could be added like this:
-
-```js
-case "claim": {
-   const [claimant, amount] = args;
-   return `Address ${fmt(claimant)} claimed ${amount} on ${contractName}`;
-}
 ```
+<type>(<optional scope>): <short summary>
 
-1. Confirm the function name and argument order in the contract ABI.
-2. Add the `case "claim"` branch to `buildDescription`, keeping the fallback
-    in `default` for unrecognised functions.
-3. Add a test in [`indexer/test/decoder.test.js`](indexer/test/decoder.test.js).
-    Build a raw event with the function symbol and XDR-encoded argument topics,
-    register a matching ABI function, then assert the description contains the
-    expected wording and values.
-4. Run `npm test` from `indexer/`.
-
-ABI fixtures in [`indexer/fixtures/`](indexer/fixtures/) are JSON objects with
-the contract `id`, display `name`, optional `description`, and a `functions`
-array. Each function entry has a `name` and its parameter metadata, for example:
-
-```json
-{
-   "id": "C...",
-   "name": "Example",
-   "functions": [{ "name": "claim", "params": [{ "name": "claimant", "type": "address" }] }]
-}
-```
-
-## Commit Message Format
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
-
+<optional body>
 ```
 <type>(<scope>): <subject>
 
@@ -363,22 +288,26 @@ Add any other context, screenshots, or relevant links.
 3. Once approved, a maintainer will merge and delete your feature branch
 4. Your contribution will be credited in the release notes
 
-## Release Process
+Common types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`. Keep the summary in the imperative mood and under ~72 characters. Reference the related issue in the body when applicable (e.g. `Closes #841`).
 
-Releases follow [Semantic Versioning](https://semver.org/):
+## Pull Request Requirements
 
-- **Major (X.0.0):** Breaking API or smart contract changes
-- **Minor (0.X.0):** New features (backward compatible)
-- **Patch (0.0.X):** Bug fixes (backward compatible)
+Before opening a pull request:
 
-Contributors are credited in `CHANGELOG.md` and release notes.
+1. Run the required test suites and make sure they pass:
+   - `cargo test` for the Rust backend/indexer.
+   - `npm test` for the frontend.
+2. Keep changes focused on a single issue; avoid unrelated refactors.
+3. Update documentation and tests when behavior changes.
+4. Fill out the pull request template (`.github/pull_request_template.md`), describing what changed and how it was tested.
 
-## Questions?
+A pull request should:
 
-- **Setup issues:** Open a GitHub discussion or issue
-- **Security vulnerabilities:** See [SECURITY.md](SECURITY.md)
-- **General questions:** Ask in discussions or the Stellar Discord `#soroban-dev` channel
+- Target the `main` branch.
+- Have a descriptive title and a linked issue.
+- Pass CI checks.
+- Be reviewed and approved before merging.
 
----
+## Questions
 
-Thank you for contributing to PERO-J! 🙌
+If anything here is unclear, open an issue and we'll be happy to help.

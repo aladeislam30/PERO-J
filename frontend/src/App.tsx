@@ -7,6 +7,7 @@ import ContractsPage from "./pages/ContractsPage";
 import ContractPage from "./pages/ContractPage";
 import WalletPage from "./pages/WalletPage";
 import EventPage from "./pages/EventPage";
+import BettingPage from "./pages/BettingPage";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="/contract/:id" element={<ContractPage />} />
             <Route path="/wallet/:address" element={<WalletPage />} />
             <Route path="/event/:seq" element={<EventPage />} />
+            <Route path="/bet" element={<BettingPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

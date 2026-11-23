@@ -63,6 +63,16 @@ PERO-J decodes contract calls on the fly using an ABI-like metadata registry, tu
 - Node.js ≥ 20
 - PostgreSQL
 
+> **Just want to explore the running app?** You can skip everything below and
+> bring up the full stack (PostgreSQL, Redis, Soroban sandbox, indexer, and
+> frontend — pre-seeded with test markets and simulated users) with a single
+> command using Docker. See the [Docker Compose](#docker-compose-local-development)
+> section:
+> ```bash
+> docker compose up --build
+> ```
+> Then open http://localhost:5173.
+
 ### 1. Clone & configure
 ```bash
 git clone https://github.com/PERO-J
@@ -104,6 +114,88 @@ make dev
 
 ---
 
+## Docker Compose (local development)
+
+Spin up the **entire stack** — PostgreSQL, Redis, Soroban local sandbox, indexer
+API (with hot-reload), and the frontend (with hot-reload), plus pre-seeded test
+markets and simulated user accounts — with a single command:
+
+```bash
+docker compose up --build
+```
+
+That's it. The first run builds the images and pre-applies the database
+migrations before the indexer starts; the `seed` one-shot service then
+pre-seeds three test markets (StellarSwap, Blend, Phoenix) and a dozen sample
+decoded events for four simulated wallet addresses, so the frontend has data
+to show immediately.
+
+Then open:
+
+- Frontend → http://localhost:5173
+- Indexer API → http://localhost:3001/health
+- Soroban sandbox RPC → http://localhost:8000 (for direct `soroban` CLI use)
+
+### Services
+
+| Service | Port | Notes |
+|---------|------|-------|
+| `postgres` | `5432` | PostgreSQL 16; data persisted in the `postgres-data` volume |
+| `redis` | `6379` | Redis 7 (AOF); provisioned for future caching/rate-limit use |
+| `soroban` | `8000` | `stellar/quickstart` local network with Soroban RPC enabled |
+| `migrate` | — | One-shot: pre-applies schema migrations before the indexer starts |
+| `indexer` | `3001` | Node.js API + poller; **hot-reload** via `node --watch` (source bind-mounted) |
+| `seed` | — | One-shot: pre-seeds test markets + simulated user accounts (idempotent) |
+| `frontend` | `5173` | Vite dev server; **hot-reload** (source bind-mounted); proxies `/api` to the indexer |
+
+### How it fits together
+
+- The `migrate` service runs the indexer's schema migrations (`npm run migrate`,
+  which calls `db.init()`) and exits 0 before the `indexer` starts, so the
+  schema is **pre-applied**.
+- The `indexer` waits for PostgreSQL, the Soroban sandbox, and `migrate` to be
+  ready, then polls the local sandbox (not testnet) and serves the REST API.
+- The `frontend` runs the Vite dev server with the source bind-mounted for
+  hot-reload. It proxies `/api/*` to the indexer via the `VITE_API_PROXY`
+  environment variable (default `http://indexer:3001` inside the compose
+  network), so no CORS configuration is required.
+- The `seed` service upserts the ABI fixtures and inserts sample decoded
+  events (only when the `events` table is empty, so re-running `docker
+  compose up` does not duplicate seed rows).
+
+### Configuration
+
+Defaults work out of the box. Override any value by exporting the variable or
+placing it in a `.env` file next to `docker-compose.yml` (see `.env.example`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `peroj` | PostgreSQL credentials/database |
+| `DATABASE_URL` | `postgres://peroj:peroj@postgres:5432/peroj` | Indexer DB connection string |
+| `DATABASE_POOL_SIZE` | `5` | Indexer Postgres pool size (migrate) / `20` (indexer) |
+| `NETWORK_PASSPHRASE` | `Standalone Network ; February 2017` | Sandbox network passphrase |
+| `START_LEDGER` | `1` | Ledger to start indexing from |
+| `POLL_MS` | `5000` | Indexer poll interval (ms) |
+| `SOROBAN_EXPLORER_CONTRACT_ID` | _(empty)_ | Set to submit decoded events on-chain (optional) |
+| `SOROBAN_EXPLORER_ADMIN_SECRET` | _(empty)_ | Admin secret for on-chain `submit_event` (optional) |
+| `API_ADMIN_KEY` | _(empty)_ | Required for `POST/DELETE /api/contracts` |
+| `VITE_API_PROXY` | `http://indexer:3001` | Vite dev proxy target for `/api` |
+
+Stop the stack with `docker compose down` (add `-v` to also drop the database
+and Redis volumes).
+
+### Resetting the seed data
+
+The seed is idempotent — it only inserts sample events when the `events` table
+is empty. To re-seed from scratch:
+
+```bash
+docker compose down -v        # wipe the postgres volume
+docker compose up --build      # migrate + seed run again
+```
+
+---
+
 ## Contract API
 
 | Function | Description |
@@ -131,7 +223,7 @@ The `update` topic lets the indexer invalidate its ABI cache without polling sto
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health` | Liveness + lag probe — returns `lag_seconds`, `uptime_seconds`, `last_ledger`. HTTP 200 when healthy, 503 when `lag_seconds > 30`. |
+| `GET /health` | Liveness + lag probe — returns `lag_seconds`, `uptime_seconds`, `last_ledger`. HTTP 200 when healthy, 503 when `lag_seconds > LAG_ALERT_THRESHOLD_S` (default 30). |
 | `GET /api/events?contract=&fn=&page=` | Paginated event list: `{ events, total, page, limit }` |
 | `GET /api/events/:seq` | Single event |
 | `GET /api/events/:seq/raw` | Raw un-decoded event topics and data: `{ seq, raw_topics, raw_data, tx_hash }` |
@@ -141,11 +233,54 @@ The `update` topic lets the indexer invalidate its ABI cache without polling sto
 | `DELETE /api/contracts/:id` | Remove contract ABI metadata (requires `Authorization: Bearer <API_ADMIN_KEY>`) |
 | `GET /api/wallet/:address` | Wallet event history |
 | `GET /api/tokens/:id/volume?decimals=` | 24-hour rolling transfer volume for a SEP-41 token. Optional `decimals` query param (integer 0–38) overrides the on-chain metadata lookup. |
+| `GET /api/v1/oracle/disputes` | Active Oracle disputes with asserted outcomes, disputer addresses, council votes and tallies, deadline, and remaining voting time. Requires `ORACLE_CONTRACT_ID`; returns HTTP 503 if it is unset. |
+| `POST /api/v1/oracle/resolutions/:submissionId/evidence` | Store immutable raw source evidence for a resolution (requires `API_ADMIN_KEY`). |
+| `GET /api/v1/oracle/resolutions/:submissionId/evidence` | Publicly retrieve the evidence bundle and its SHA-256 hash for verification. |
 
-PostgreSQL `events.seq` is the canonical REST/frontend identifier. On-chain
-`EventSeq` values are stored separately as nullable `onchain_seq` values because
-the database row sequence and contract submission sequence are different
-namespaces and can diverge.
+The disputes endpoint reads the Oracle contract on each request. Each dispute
+includes `affirmative_votes`, `negative_votes`, the individual `votes`, an ISO
+8601 `deadline`, and `remaining_seconds` / human-readable `remaining_time`.
+
+The resolution evidence write endpoint is the ingestion hook for the automated
+resolution worker. It accepts `response_payload` (the exact raw response body
+as a string), `response_status` (100–599), `response_headers` (string-valued
+object), and `resolved_at` (timestamp). Each submission ID can be recorded
+once; retries with an identical evidence bundle return the original record,
+while different evidence for an existing submission returns HTTP 409. The
+database rejects updates, deletes, and truncation of audit records.
+
+The public endpoint returns `submission_id`, `response_payload`,
+`response_status`, `response_headers`, `resolved_at`, `recorded_at`, and
+`evidence_hash`. The hash is SHA-256 over the UTF-8 bytes of the JSON
+serialization of those evidence fields except `recorded_at` and
+`evidence_hash`, in this order: `submission_id`, `response_payload`,
+`response_status`, `response_headers`, `resolved_at`. Header keys are sorted
+in ascending ASCII order and represented in the hash input as an array of
+`[name, value]` pairs; the timestamp is normalized to ISO 8601 before hashing.
+This lets clients independently reproduce the digest.
+
+### Oracle council inactivity alerts
+
+When `ORACLE_CONTRACT_ID`, `ORACLE_COUNCIL_ROSTER`, and
+`PAGERDUTY_ROUTING_KEY` are configured, the indexer checks active disputes
+hourly and sends PagerDuty Events API v2 alerts when a dispute has not reached
+quorum after 24, 48, and 60 hours of its 72-hour voting period. The roster is a
+comma-separated list of council Stellar addresses. `ORACLE_COUNCIL_QUORUM` can
+set the required number of votes; when omitted, a strict majority of the
+configured roster is used. The PagerDuty service associated with the routing
+key should use an escalation policy that notifies the council roster. The
+monitor is disabled with a startup warning if any required setting is absent.
+
+### Event sequence namespaces
+
+The `events` table tracks two distinct sequence numbers:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `seq` | `BIGSERIAL` (PK) | Auto-increment database sequence. The canonical identifier used by the REST API and frontend (e.g. `GET /api/events/:seq`). Always present. |
+| `onchain_seq` | `BIGINT` (nullable) | The `EventSeq` value returned by the on-chain `ExplorerContract` after a successful submission. `NULL` when the event was not submitted or the submission failed. |
+
+These two namespaces are **independent** and will diverge over time — not every database row has a corresponding on-chain submission, and on-chain sequence numbers are scoped to the contract, not the database. Always use `seq` to reference events in API calls and frontend URLs.
 
 ### Volume endpoint
 
@@ -173,7 +308,7 @@ Example response:
 
 Configure an external monitor (UptimeRobot, Better Uptime, or similar) to call
 `GET /health` every **60 seconds** and alert when the response is HTTP 503 **or**
-`lag_seconds > 30`.  This satisfies ROADMAP Tranche 2 deliverable 2.7 (< 10 s
+`lag_seconds > LAG_ALERT_THRESHOLD_S` (default `30`).  This satisfies ROADMAP Tranche 2 deliverable 2.7 (< 10 s
 index lag under normal load, alert threshold 30 s).
 
 Example healthy response:
@@ -199,7 +334,7 @@ Example degraded response (HTTP 503):
 ```
 
 Override the alert threshold via the `LAG_ALERT_THRESHOLD_S` environment variable
-(default `30`).
+(default `30`). Non-numeric values fall back to the default of `30`.
 
 ---
 
@@ -212,14 +347,7 @@ The decoder recognises SEP-41 token events (`transfer`, `mint`, `burn`) and form
 ## Validated Need & Traction
 
 - **Confirmed gap:** StellarExpert and Stellar.expert (the two primary Stellar explorers) show
-  raw XDR bytes for all Soroban contract events as of May 2026 — no human-readable decoding exists.
-- **Community signal:** Developers in `#soroban-dev` on Stellar Discord regularly ask how to
-  inspect their own contract events in a readable form. No existing tool answers this.
-- **Comparable success:** Etherscan's ABI decoder is one of its most-used features. Solscan
-  built the same for Solana and became the primary explorer for Solana DeFi. Stellar has no
-  equivalent for Soroban.
-- **Target users:** Soroban dApp developers, DeFi users, NFT traders, auditors — anyone who
-  needs to understand what is happening on-chain.
+  raw XDR bytes for all Soroban contract events as of May 2026 — no human-readable 
 
 ---
 
@@ -357,12 +485,48 @@ For any cloud provider, also export a `pg_dump` weekly to object storage (S3, GC
 
 ---
 
+## Production Docker images
+
+The indexer ships an optimized multi-stage production image
+(`indexer/Dockerfile` / `indexer/Dockerfile.indexer`): production-only
+dependencies (no dev deps), the transitive `sodium-native` native package
+stripped, docs/tests/source-maps pruned, and a non-root `appuser` runtime. The
+result is a ~140MB uncompressed (~50MB compressed) image that never runs as
+root, with the Kubernetes deployment enforcing `runAsNonRoot` and dropping all
+Linux capabilities. See [docs/kubernetes-deployment.md](docs/kubernetes-deployment.md)
+for the hardening details.
+
 ## Contributing
 
 PRs welcome. Please open an issue first for large changes.
 
 ---
 
+## Note to maintainers
+
+- Issue #792: `EventPage` already validates the `seq` param (`isValidSeq`) and skips the API request for invalid values; no code change needed.
+- Issue #793: `CopyButton` already accepts an `ariaLabel` prop applied as `aria-label`, and all usages pass labels; no code change needed.
+- Issue #794: `Skeleton` already supports `variant="table"` and `"card"` and is used in `Home`, `ContractPage` and `WalletPage`; no code change needed.
+- Issue #795: `Home.tsx` already debounces the search query (300ms, cleared on unmount) via `debouncedSearchQuery`; no code change needed.
+
+---
+
 ## License
 
 [MIT](LICENSE)
+
+## Handsoff notes
+
+<!-- handsoff-issue-850 -->
+- #850: Implement `transfer_admin` requiring both parties to sign
+
+<!-- handsoff-issue-745 -->
+- #745: `init()` must be permanently irreversible after first call
+
+---
+
+## Documentation
+
+- [REST API Reference](docs/rest-api.md)
+- [Register Contract Guide](docs/register-contract.md)
+- [Bonds, Challenge Windows & Slashing Rules](docs/bonds-challenge-slashing.md)

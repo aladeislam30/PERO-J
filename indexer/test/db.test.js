@@ -11,18 +11,23 @@
 
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import pg from "pg";
 
 // ── in-memory SQL mock ────────────────────────────────────────────────────────
 
 const _calls = []; // { sql, params }[]
+const _appliedMigrations = new Set();
 let _nextRow = null; // override row returned by the next query
 let _queryError = null; // if set, next query throws this error
+let _failQuery = null;
 
 function resetMock() {
   _calls.length = 0;
+  _appliedMigrations.clear();
   _nextRow = null;
   _queryError = null;
+  _failQuery = null;
 }
 
 function lastCall() {
@@ -32,12 +37,21 @@ function lastCall() {
 // Fake client returned by pool.connect()
 const fakeClient = {
   query: async (sql, params) => {
+    if (_failQuery?.(sql)) {
+      throw new Error("injected query failure");
+    }
     if (_queryError) {
       const err = _queryError;
       _queryError = null;
       throw err;
     }
     _calls.push({ sql, params });
+    if (sql.includes("SELECT 1 FROM schema_migrations WHERE id = $1")) {
+      return { rows: [], rowCount: _appliedMigrations.has(params[0]) ? 1 : 0 };
+    }
+    if (sql.includes("INSERT INTO schema_migrations")) {
+      _appliedMigrations.add(params[0]);
+    }
     if (_nextRow !== null) {
       const row = _nextRow;
       _nextRow = null;
@@ -56,7 +70,11 @@ pg.Pool.prototype.query = async (sql, params) => {
     _queryError = null;
     throw err;
   }
-  _calls.push({ sql, params });
+  _calls.push({
+    sql: typeof sql === "object" ? sql.text : sql,
+    params,
+    query_timeout: typeof sql === "object" ? sql.query_timeout : undefined,
+  });
   if (_nextRow !== null) {
     const row = _nextRow;
     _nextRow = null;
@@ -71,16 +89,202 @@ import { db, getPoolSize } from "../src/db.js";
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
+describe("getPoolSize()", () => {
+  it("uses a valid configured pool size", () => {
+    assert.equal(getPoolSize("8"), 8);
+  });
+
+  it("falls back to the default and warns for an invalid value", () => {
+    const originalWarn = console.warn;
+    const warnings = [];
+    console.warn = (message) => warnings.push(message);
+    try {
+      assert.equal(getPoolSize("101"), 20);
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /Invalid DATABASE_POOL_SIZE/);
+  });
+
+  it("uses the default when the value is missing", () => {
+    const originalWarn = console.warn;
+    const originalPoolSize = process.env.DATABASE_POOL_SIZE;
+    delete process.env.DATABASE_POOL_SIZE;
+    console.warn = () => assert.fail("missing value should not warn");
+    try {
+      assert.equal(getPoolSize(), 20);
+    } finally {
+      console.warn = originalWarn;
+      if (originalPoolSize === undefined) {
+        delete process.env.DATABASE_POOL_SIZE;
+      } else {
+        process.env.DATABASE_POOL_SIZE = originalPoolSize;
+      }
+    }
+  });
+});
+
+describe("db.init() migrations", () => {
+  beforeEach(() => resetMock());
+
+  it("runs migrations on a fresh database", async () => {
+    await db.init();
+    const migrationSql = _calls.find((call) =>
+      call.sql.includes("ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT")
+    );
+    assert.ok(migrationSql, "expected a migration to add sac_asset idempotently");
+    assert.ok(
+      _calls.some((call) => call.sql.includes("CREATE TABLE IF NOT EXISTS checkpoint_state")),
+      "expected the checkpoint state migration to run"
+    );
+  });
+
+  it("adds sac_asset when earlier migrations are already recorded", async () => {
+    for (const id of [1, 2, 3, 4, 5]) _appliedMigrations.add(id);
+
+    await db.init();
+
+    const migration = _calls.find((call) =>
+      call.sql.includes("ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT")
+    );
+    assert.ok(migration, "expected the repair migration to run");
+    assert.ok(
+      _calls.some(
+        (call) => call.sql.includes("INSERT INTO schema_migrations") && call.params[0] === 6
+      ),
+      "expected migration 6 to be recorded"
+    );
+  });
+});
+
+describe("db.createResolutionAuditLog() / db.getResolutionAuditLog()", () => {
+  beforeEach(() => resetMock());
+
+  const evidence = {
+    submission_id: "42",
+    response_payload: '{"outcome":"resolved"}',
+    response_status: 200,
+    response_headers: {
+      "2": "two",
+      "10": "ten",
+      "x-source": "oracle",
+      "content-type": "application/json",
+    },
+    resolved_at: "2026-10-20T15:04:05.000Z",
+  };
+
+  it("stores a SHA-256 hash of a deterministically ordered evidence bundle", async () => {
+    _nextRow = { ...evidence, evidence_hash: "returned-hash" };
+    await db.createResolutionAuditLog(evidence);
+
+    const { sql, params } = lastCall();
+    const bundle = {
+      submission_id: "42",
+      response_payload: '{"outcome":"resolved"}',
+      response_status: 200,
+      response_headers: [
+        ["10", "ten"],
+        ["2", "two"],
+        ["content-type", "application/json"],
+        ["x-source", "oracle"],
+      ],
+      resolved_at: evidence.resolved_at,
+    };
+    const expectedHash = createHash("sha256")
+      .update(JSON.stringify(bundle))
+      .digest("hex");
+    assert.match(sql, /INSERT INTO resolution_audit_logs/);
+    assert.match(sql, /ON CONFLICT \(submission_id\) DO NOTHING/);
+    assert.equal(params[0], evidence.submission_id);
+    assert.equal(params[1], evidence.response_payload);
+    assert.equal(params[2], evidence.response_status);
+    assert.equal(
+      params[3],
+      JSON.stringify({
+        "2": "two",
+        "10": "ten",
+        "content-type": "application/json",
+        "x-source": "oracle",
+      }),
+    );
+    assert.equal(params[4], evidence.resolved_at);
+    assert.equal(params[5], expectedHash);
+  });
+
+  it("fetches an audit record by submission id", async () => {
+    const record = { submission_id: "42", evidence_hash: "a".repeat(64) };
+    _nextRow = record;
+
+    assert.deepEqual(await db.getResolutionAuditLog("42"), record);
+    assert.match(lastCall().sql, /FROM resolution_audit_logs/);
+    assert.deepEqual(lastCall().params, ["42"]);
+  });
+
+  it("returns an identical record on retry and rejects conflicting evidence", async () => {
+    const originalGet = db.getResolutionAuditLog;
+    const canonicalHeaders = {
+      "2": "two",
+      "10": "ten",
+      "content-type": "application/json",
+      "x-source": "oracle",
+    };
+    const bundle = {
+      submission_id: "42",
+      response_payload: evidence.response_payload,
+      response_status: evidence.response_status,
+      response_headers: [
+        ["10", "ten"],
+        ["2", "two"],
+        ["content-type", "application/json"],
+        ["x-source", "oracle"],
+      ],
+      resolved_at: evidence.resolved_at,
+    };
+    const evidenceHash = createHash("sha256")
+      .update(JSON.stringify(bundle))
+      .digest("hex");
+    const originalRecord = {
+      submission_id: "42",
+      response_headers: canonicalHeaders,
+      evidence_hash: evidenceHash,
+    };
+
+    try {
+      db.getResolutionAuditLog = async () => originalRecord;
+      assert.deepEqual(await db.createResolutionAuditLog(evidence), originalRecord);
+
+      db.getResolutionAuditLog = async () => ({
+        ...originalRecord,
+        evidence_hash: "f".repeat(64),
+      });
+      await assert.rejects(db.createResolutionAuditLog(evidence), {
+        code: "RESOLUTION_AUDIT_CONFLICT",
+      });
+    } finally {
+      db.getResolutionAuditLog = originalGet;
+    }
+  });
+});
+
 describe("db.ping()", () => {
   beforeEach(() => resetMock());
 
   it("returns true when query succeeds", async () => {
     const result = await db.ping();
     assert.equal(result, true);
+    assert.equal(lastCall().sql, "SELECT 1");
+    assert.equal(lastCall().query_timeout, 5000);
   });
 
   it("returns false when query throws", async () => {
     _queryError = new Error("connection refused");
+    const result = await db.ping();
+    assert.equal(result, false);
+  });
+
+  it("returns false when the query times out", async () => {
+    _queryError = new Error("Query read timeout");
     const result = await db.ping();
     assert.equal(result, false);
   });
@@ -137,6 +341,39 @@ describe("db.upsertEvent()", () => {
     await db.upsertEvent(sampleEvent);
     const { sql } = lastCall();
     assert.ok(sql.includes("onchain_seq"), "expected onchain_seq column in INSERT");
+  });
+
+  it("persists sac_asset when provided", async () => {
+    await db.upsertEvent({ ...sampleEvent, sac_asset: "USDC" });
+    const { sql, params } = lastCall();
+    assert.ok(sql.includes("sac_asset"), "expected sac_asset column in INSERT");
+    assert.equal(params[7], "USDC");
+  });
+
+  it("writes ledger events and checkpoint in one transaction", async () => {
+    await db.persistLedger([sampleEvent], { sequence: 1234, hash: "ledger-hash" });
+
+    const statements = _calls.map((call) => call.sql.trim());
+    assert.equal(statements[0], "BEGIN");
+    assert.ok(statements[1].startsWith("INSERT INTO events"));
+    assert.ok(statements[2].startsWith("INSERT INTO checkpoint_state"));
+    assert.equal(statements[3], "COMMIT");
+    const checkpointCall = _calls.find((call) =>
+      call.sql.startsWith("INSERT INTO checkpoint_state")
+    );
+    assert.deepEqual(checkpointCall.params, ["soroban-indexer", 1234, "ledger-hash"]);
+  });
+
+  it("rolls back ledger events when checkpoint persistence fails", async () => {
+    _failQuery = (sql) => sql.includes("INSERT INTO checkpoint_state");
+
+    await assert.rejects(
+      db.persistLedger([sampleEvent], { sequence: 1234, hash: "ledger-hash" }),
+      /injected query failure/
+    );
+
+    assert.ok(_calls.some((call) => call.sql.trim() === "ROLLBACK"));
+    assert.ok(!_calls.some((call) => call.sql.trim() === "COMMIT"));
   });
 });
 
@@ -275,6 +512,16 @@ describe("db.getCursor() / db.setCursor()", () => {
     }
   });
 
+  it("getCheckpoint returns the persisted sequence and hash", async () => {
+    _nextRow = { last_ledger_sequence: "5000000", last_ledger_hash: "ledger-hash" };
+    const result = await db.getCheckpoint();
+    assert.deepEqual(result, {
+      last_ledger_sequence: 5000000,
+      last_ledger_hash: "ledger-hash",
+    });
+    assert.deepEqual(lastCall().params, ["soroban-indexer"]);
+  });
+
   it("setCursor executes an INSERT ... ON CONFLICT query", async () => {
     await db.setCursor(4999999);
     const { sql, params } = lastCall();
@@ -338,6 +585,18 @@ describe("db.getLeaderboard()", () => {
     const { sql, params } = lastCall();
     assert.ok(sql.includes("LIMIT"));
     assert.equal(params[params.length - 1], 50);
+  });
+
+  it("reads from the mv_leaderboard_ranks materialized view", async () => {
+    await db.getLeaderboard(10);
+    const { sql } = lastCall();
+    assert.match(sql, /FROM mv_leaderboard_ranks/i);
+    assert.doesNotMatch(sql, /GROUP BY/i);
+  });
+
+  it("refreshLeaderboard() refreshes the view concurrently", async () => {
+    await db.refreshLeaderboard();
+    assert.match(lastCall().sql, /REFRESH MATERIALIZED VIEW CONCURRENTLY mv_leaderboard_ranks/i);
   });
 });
 
@@ -463,6 +722,33 @@ describe("db.getContracts()", () => {
     const params = _calls.flatMap((c) => c.params ?? []);
     assert.ok(params.includes(20), "expected offset=20 in query params");
   });
+
+  // Regression test for #787: when q is present the LIMIT/OFFSET $N indices
+  // must still be correct — i.e. the q param occupies $1, LIMIT must be $2,
+  // and OFFSET must be $3.  Previously the +1/+2 arithmetic was computed
+  // against the wrong params array which could produce the wrong page.
+  it("uses correct LIMIT/OFFSET $N indices when q and page are both provided (#787)", async () => {
+    _nextRow = { count: "3" };
+    // page=2, limit=1 → offset = (2-1)*1 = 1
+    const result = await db.getContracts({ q: "swap", page: 2, limit: 1 });
+    assert.equal(result.page, 2);
+    assert.equal(result.limit, 1);
+
+    // Find the SELECT (non-COUNT) query — it should contain LIMIT and OFFSET
+    const selectCall = _calls.find(
+      (c) => c.sql && c.sql.toUpperCase().includes("ORDER BY NAME ASC")
+    );
+    assert.ok(selectCall, "expected a SELECT query with ORDER BY name ASC");
+
+    const selectParams = selectCall.params;
+    // $1 = q wildcard, $2 = limit (1), $3 = offset (1)
+    assert.ok(
+      typeof selectParams[0] === "string" && selectParams[0].includes("swap"),
+      "expected q wildcard as first SELECT param ($1)"
+    );
+    assert.equal(selectParams[1], 1, "expected LIMIT=1 as second SELECT param ($2)");
+    assert.equal(selectParams[2], 1, "expected OFFSET=1 as third SELECT param ($3)");
+  });
 });
 
 describe("db.getEvents() full-text search (#321)", () => {
@@ -516,4 +802,3 @@ describe("db.getEvents() full-text search (#321)", () => {
     );
   });
 });
-
