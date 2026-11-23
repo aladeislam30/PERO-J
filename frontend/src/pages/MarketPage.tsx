@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import FinalizeMarketButton from "../components/FinalizeMarketButton";
+import { useDispute } from "../hooks/useDisputes";
 import { useMarket } from "../hooks/useMarkets";
 import { recordFinalization } from "../markets/storage";
 import { shortenTxHash, stellarExpertTxUrl } from "../oracleBonds";
@@ -9,6 +10,7 @@ import { shortenTxHash, stellarExpertTxUrl } from "../oracleBonds";
 export default function MarketPage() {
   const { id = "" } = useParams();
   const market = useMarket(id);
+  const dispute = useDispute(id);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -39,6 +41,7 @@ export default function MarketPage() {
             {isFinalized ? "Finalized" : market.oracleState === "challenged" ? "Challenged" : "Submitted"}
           </span>
           <code style={{ fontSize: 12, color: "var(--muted)" }}>{market.id}</code>
+          {dispute && <Link to={`/disputes/${market.id}`}>View dispute details</Link>}
         </div>
       </section>
 
