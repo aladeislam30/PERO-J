@@ -27,8 +27,8 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy, rustfmt
 
-      - name: Install soroban-cli
-        run: cargo install --locked soroban-cli
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -38,6 +38,44 @@ jobs:
 
       - name: Run contract tests
         run: cargo test
+
+      - name: Build, optimize, and check contract WASM sizes
+        working-directory: ${{ github.workspace }}
+        env:
+          MAX_CONTRACT_WASM_BYTES: 65536
+        run: |
+          cargo build --workspace --target wasm32-unknown-unknown --release
+
+          contracts=(
+            soroban_explorer_contract
+            soroban_ipredict_token_contract
+            soroban_market_contract
+            soroban_referral_registry_contract
+          )
+
+          for contract in "${contracts[@]}"; do
+            wasm="target/wasm32-unknown-unknown/release/${contract}.wasm"
+            optimized="${wasm%.wasm}.optimized.wasm"
+
+            test -s "$wasm" || {
+              echo "::error::Missing WASM build output: $wasm"
+              exit 1
+            }
+
+            stellar contract optimize --wasm "$wasm"
+
+            test -s "$optimized" || {
+              echo "::error::Missing optimized WASM output: $optimized"
+              exit 1
+            }
+
+            size=$(stat -c '%s' "$optimized")
+            echo "$contract optimized WASM: ${size} bytes"
+            if (( size >= MAX_CONTRACT_WASM_BYTES )); then
+              echo "::error::$contract optimized WASM is ${size} bytes; must be below ${MAX_CONTRACT_WASM_BYTES} bytes"
+              exit 1
+            fi
+          done
 
   frontend:
     name: Frontend tests

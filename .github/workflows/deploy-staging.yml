@@ -1,7 +1,7 @@
 name: Deploy to staging (testnet)
 
 # Automated continuous deployment to the staging environment on every merge
-# to main (issue #1014). The pipeline:
+# to main (issues #1014 and #1190). The pipeline:
 #   1. Builds the indexer + frontend (production) Docker images and pushes
 #      them to the GitHub Container Registry (ghcr.io).
 #   2. Deploys the updated images to the `pero-j-staging` Kubernetes namespace
@@ -145,7 +145,7 @@ jobs:
           printf '%s' "$KUBECONFIG_STAGING" | base64 -d > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
           kubectl version --client >/dev/null
-          kubectl cluster-info || true
+          kubectl cluster-info
 
       - name: Apply staging namespace + ConfigMap
         if: steps.gate.outputs.enabled == 'true'
