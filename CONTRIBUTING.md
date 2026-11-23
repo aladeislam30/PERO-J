@@ -295,6 +295,10 @@ cd frontend
 npm test
 ```
 
+The indexer migration integration test requires `DATABASE_URL` and creates a
+disposable schema in that PostgreSQL database. CI provides an isolated
+PostgreSQL service for the test suite.
+
 Aim for > 80% coverage of critical paths (decoder logic, API endpoints, UI components).
 
 ## Documentation
