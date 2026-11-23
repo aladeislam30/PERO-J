@@ -116,6 +116,7 @@ jobs:
   deploy-staging:
     name: Deploy to staging & smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build-and-push
     env:
       IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
@@ -186,8 +187,18 @@ jobs:
       - name: Wait for rollouts to complete
         if: steps.gate.outputs.enabled == 'true'
         run: |
-          kubectl rollout status deployment/pero-indexer -n "${STAGING_NAMESPACE}" --timeout=5m
-          kubectl rollout status deployment/frontend -n "${STAGING_NAMESPACE}" --timeout=5m
+          kubectl rollout status deployment/pero-indexer -n "${STAGING_NAMESPACE}" --timeout=5m &
+          INDEXER_ROLLOUT_PID=$!
+          kubectl rollout status deployment/frontend -n "${STAGING_NAMESPACE}" --timeout=5m &
+          FRONTEND_ROLLOUT_PID=$!
+
+          INDEXER_STATUS=0
+          FRONTEND_STATUS=0
+          wait "$INDEXER_ROLLOUT_PID" || INDEXER_STATUS=$?
+          wait "$FRONTEND_ROLLOUT_PID" || FRONTEND_STATUS=$?
+          if [ "$INDEXER_STATUS" -ne 0 ] || [ "$FRONTEND_STATUS" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Run testnet smoke tests
         if: steps.gate.outputs.enabled == 'true'

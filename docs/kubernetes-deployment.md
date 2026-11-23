@@ -71,7 +71,8 @@ The indexer container exposes two health endpoints:
 The `deploy-staging.yml` GitHub Actions workflow builds and pushes the indexer
 and frontend images to GHCR on every push to `main`. When staging credentials
 are configured, it applies the testnet ConfigMap and Kubernetes resources,
-waits for both deployments to roll out, and runs `scripts/smoke-test.sh`.
+waits for both deployments to roll out concurrently, and runs
+`scripts/smoke-test.sh`. The deploy and smoke-test job has a 10-minute timeout.
 
 Configure these repository Actions secrets to enable deployment:
 
