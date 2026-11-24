@@ -1,8 +1,11 @@
 import http from "node:http";
 import pg from "pg";
+import { challengeWindowSeconds } from "./challenge-window.js";
+import { finalizeUncontestedMarkets } from "./workers/auto-finalizer.js";
 import { submitExpiredMarket } from "./workers/auto-submitter.js";
 
 const POLL_MS = Number(process.env.ORACLE_POLL_MS) || 15_000;
+const FINALIZE_POLL_MS = Number(process.env.ORACLE_FINALIZE_POLL_MS) || 60_000;
 const HEARTBEAT_MS = Number(process.env.ORACLE_HEARTBEAT_MS) || 60_000;
 const HEALTH_PORT = Number(process.env.ORACLE_HEALTH_PORT) || 9101;
 
@@ -17,6 +20,9 @@ export const metrics = {
   polls: 0,
   pollErrors: 0,
   marketsSubmitted: 0,
+  lastFinalizeAt: null,
+  marketsFinalized: 0,
+  finalizeErrors: 0,
 };
 
 /** Scan for expired open markets and submit each one. */
@@ -33,9 +39,22 @@ export async function pollOnce(db = pool, submit = submitExpiredMarket) {
   metrics.lastPollAt = Date.now();
 }
 
+/** Finalize uncontested submissions whose challenge window has closed. */
+export async function finalizeOnce(
+  db = pool,
+  finalizeAll = finalizeUncontestedMarkets,
+) {
+  const { finalized, failed } = await finalizeAll(db);
+  metrics.marketsFinalized += finalized;
+  metrics.finalizeErrors += failed;
+  metrics.lastFinalizeAt = Date.now();
+}
+
 async function run() {
+  challengeWindowSeconds(); // Refuse to start on an invalid window.
   let stopping = false;
   let timer;
+  let finalizeTimer;
 
   const loop = async () => {
     try {
@@ -46,6 +65,19 @@ async function run() {
     }
     if (!stopping) {
       timer = setTimeout(loop, POLL_MS);
+    }
+  };
+
+  // Separate loop so slow data providers cannot delay finalization.
+  const finalizeLoop = async () => {
+    try {
+      await finalizeOnce();
+    } catch (err) {
+      metrics.finalizeErrors++;
+      console.error("[oracle] finalize poll failed:", err.message);
+    }
+    if (!stopping) {
+      finalizeTimer = setTimeout(finalizeLoop, FINALIZE_POLL_MS);
     }
   };
 
@@ -76,6 +108,7 @@ async function run() {
     stopping = true;
     console.log(`[oracle] ${signal} received, shutting down`);
     clearTimeout(timer);
+    clearTimeout(finalizeTimer);
     clearInterval(heartbeat);
     server.close();
     await pool.end();
@@ -84,7 +117,7 @@ async function run() {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
 
-  await loop();
+  await Promise.all([loop(), finalizeLoop()]);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

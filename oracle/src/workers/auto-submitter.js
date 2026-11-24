@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { registry } from "../adapters/index.js";
-
-const execFileAsync = promisify(execFile);
+import { challengeWindowSeconds } from "../challenge-window.js";
+import { invokeMarketContract } from "../market-contract.js";
 
 /**
  * Query every adapter the registry maps to the market and require unanimous
@@ -35,26 +33,11 @@ export async function determineOutcome(market, adapters = registry) {
  * @param {boolean} outcome
  */
 export async function submitOutcomeOnChain(marketId, outcome) {
-  await execFileAsync("soroban", [
-    "contract",
-    "invoke",
-    "--id",
-    process.env.PERO_MARKET_CONTRACT_ID,
-    "--source",
-    process.env.ORACLE_HOT_WALLET_SECRET,
-    "--rpc-url",
-    process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org",
-    "--network-passphrase",
-    process.env.NETWORK_PASSPHRASE || "Test SDF Network ; September 2015",
-    "--",
-    "submit_outcome",
-    "--market_id",
-    marketId,
-    "--outcome",
-    String(outcome),
-    "--bond",
-    String(process.env.ORACLE_BOND_AMOUNT),
-  ]);
+  await invokeMarketContract("submit_outcome", {
+    market_id: marketId,
+    outcome: String(outcome),
+    bond: String(process.env.ORACLE_BOND_AMOUNT),
+  });
 }
 
 /**
@@ -82,9 +65,10 @@ export async function submitExpiredMarket(db, market, deps = {}) {
   try {
     const outcome = await determine(market);
     await submit(market.id, outcome);
-    await db.query("UPDATE markets SET status = 'submitted' WHERE id = $1", [
-      market.id,
-    ]);
+    await db.query(
+      "UPDATE markets SET status = 'submitted', challenge_deadline = NOW() + make_interval(secs => $2) WHERE id = $1",
+      [market.id, challengeWindowSeconds()],
+    );
     return true;
   } catch (err) {
     await db.query("UPDATE markets SET status = 'open' WHERE id = $1", [

@@ -266,6 +266,15 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_markets_status_ends_at ON markets(status, ends_at);
     `,
   },
+  {
+    id: 17,
+    name: "add_markets_challenge_deadline",
+    sql: `
+      ALTER TABLE markets ADD COLUMN IF NOT EXISTS challenge_deadline TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_markets_challenge_deadline
+        ON markets(challenge_deadline) WHERE status IN ('submitted', 'finalizing');
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {

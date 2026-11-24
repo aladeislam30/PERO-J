@@ -31,6 +31,18 @@ Keys: `COINMARKETCAP_API_KEY`, `ODDSAPI_API_KEY`, `NOAA_API_TOKEN`, and
 its feed URL is set). Limits are per process; replicas sharing a key must divide
 the quota between them.
 
+## Auto-finalization
+
+Every `ORACLE_FINALIZE_POLL_MS` (default 60 s; keep below 5 minutes) the daemon
+calls `finalize_outcome` for undisputed submissions past their deadline, using
+`ORACLE_HOT_WALLET_SECRET`. The contract resolves the market and returns the
+bond to the submitter. `ORACLE_CHALLENGE_WINDOW_SECONDS` (default 259200) must
+match the deployed contract; calling early is rejected on-chain and retried.
+
+The deployed contract must expose `finalize_outcome(market_id)`. The market
+contract in `contracts/market` does not yet, so until it does calls fail, are
+logged, and leave the market `submitted`.
+
 ## Source factories
 
 Dependency-free Node.js 20+ adapters for resolving political, weather, and
