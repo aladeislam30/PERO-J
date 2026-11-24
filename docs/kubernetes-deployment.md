@@ -66,6 +66,28 @@ The indexer container exposes two health endpoints:
    kubectl logs -f deployment/frontend
    ```
 
+## Automated staging deployment
+
+The `Deploy to staging (testnet)` GitHub Actions workflow builds and publishes
+the indexer and production frontend images on pushes to `main`, deploys them to
+the `pero-j-staging` namespace, waits for both rollouts, and runs
+`scripts/smoke-test.sh` against the staging frontend.
+
+Configure these repository Actions secrets before merging changes that should
+deploy:
+
+- `KUBECONFIG_STAGING`: base64-encoded kubeconfig for the staging cluster. The
+  identity must be able to create the namespace and manage its resources.
+- `STAGING_DATABASE_URL`: connection URL for the staging PostgreSQL database.
+- `STAGING_API_ADMIN_KEY` (optional): API admin key; protected routes are
+  disabled when unset.
+- `STAGING_EXPLORER_ADMIN_SECRET` (optional): signing secret for on-chain event
+  submission.
+
+The workflow fails if either required secret is missing, so an image build
+cannot appear successful while staging remains outdated. Deployment and smoke
+tests run after image publishing, with a 10-minute deployment job timeout.
+
 
 ## Production image hardening
 

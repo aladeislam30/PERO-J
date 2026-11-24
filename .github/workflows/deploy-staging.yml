@@ -8,10 +8,9 @@ name: Deploy to staging (testnet)
 #      (connected to Stellar testnet via the staging ConfigMap).
 #   3. Runs the testnet smoke test suite against the staging endpoints.
 #
-# The build step runs on every push to main. The deploy + smoke steps are
-# skipped automatically until the required staging secrets are configured
-# (see "Required secrets" below), so the workflow is safe to merge before
-# a staging cluster exists.
+# The build step runs on every push to main. Deployment requires the staging
+# secrets below; if they are missing, the workflow fails visibly rather than
+# reporting a successful build while leaving staging stale.
 #
 # Required repository secrets (configure under Settings → Secrets → Actions):
 #   KUBECONFIG_STAGING     – base64-encoded kubeconfig for the staging cluster
@@ -42,11 +41,6 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  # ghcr image names are lowercase; the repo owner (john2ydep2-gt) is already
-  # lowercase. If the owner ever contains uppercase, switch to the
-  # docker/metadata-action to lower-case the image ref.
-  INDEXER_IMAGE: ghcr.io/${{ github.repository_owner }}/pero-j-indexer
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/pero-j-frontend
   STAGING_NAMESPACE: pero-j-staging
 
 jobs:
@@ -60,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.sha }}
+      indexer-image: ${{ steps.images.outputs.indexer-image }}
+      frontend-image: ${{ steps.images.outputs.frontend-image }}
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -78,6 +74,13 @@ jobs:
         id: meta
         run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
+      - name: Normalize image names
+        id: images
+        run: |
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "indexer-image=${REGISTRY}/${owner}/pero-j-indexer" >> "$GITHUB_OUTPUT"
+          echo "frontend-image=${REGISTRY}/${owner}/pero-j-frontend" >> "$GITHUB_OUTPUT"
+
       - name: Build & push indexer image
         uses: docker/build-push-action@v6
         with:
@@ -85,8 +88,8 @@ jobs:
           file: ./indexer/Dockerfile
           push: true
           tags: |
-            ${{ env.INDEXER_IMAGE }}:${{ steps.meta.outputs.sha }}
-            ${{ env.INDEXER_IMAGE }}:staging
+            ${{ steps.images.outputs.indexer-image }}:${{ steps.meta.outputs.sha }}
+            ${{ steps.images.outputs.indexer-image }}:staging
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -97,47 +100,45 @@ jobs:
           file: ./frontend/Dockerfile.prod
           push: true
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.sha }}
-            ${{ env.FRONTEND_IMAGE }}:staging
+            ${{ steps.images.outputs.frontend-image }}:${{ steps.meta.outputs.sha }}
+            ${{ steps.images.outputs.frontend-image }}:staging
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Image summary
         run: |
           echo "### Built images" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.INDEXER_IMAGE }}:${{ steps.meta.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ steps.images.outputs.indexer-image }}:${{ steps.meta.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ steps.images.outputs.frontend-image }}:${{ steps.meta.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────────────────────────────────
   # 2. Deploy updated containers to the staging cluster and run smoke tests.
-  # Skipped (steps no-op) until KUBECONFIG_STAGING + STAGING_DATABASE_URL are
-  # configured, so the workflow is merge-safe before a staging cluster exists.
+  # Requires KUBECONFIG_STAGING + STAGING_DATABASE_URL to be configured.
   # ─────────────────────────────────────────────────────────────────────────
   deploy-staging:
     name: Deploy to staging & smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build-and-push
     env:
       IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+      INDEXER_IMAGE: ${{ needs.build-and-push.outputs.indexer-image }}
+      FRONTEND_IMAGE: ${{ needs.build-and-push.outputs.frontend-image }}
     steps:
       - name: Check out
         uses: actions/checkout@v4
 
-      - name: Check staging secrets are configured
-        id: gate
+      - name: Verify staging secrets are configured
         env:
           KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
           STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
         run: |
           if [ -z "$KUBECONFIG_STAGING" ] || [ -z "$STAGING_DATABASE_URL" ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Staging secrets are not configured — skipping deploy. Set KUBECONFIG_STAGING and STAGING_DATABASE_URL to enable automated staging deployment."
-          else
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "::error::Set KUBECONFIG_STAGING and STAGING_DATABASE_URL repository secrets to enable automated staging deployment."
+            exit 1
           fi
 
       - name: Configure kubectl
-        if: steps.gate.outputs.enabled == 'true'
         env:
           KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
         run: |
@@ -145,16 +146,14 @@ jobs:
           printf '%s' "$KUBECONFIG_STAGING" | base64 -d > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
           kubectl version --client >/dev/null
-          kubectl cluster-info || true
+          kubectl cluster-info
 
       - name: Apply staging namespace + ConfigMap
-        if: steps.gate.outputs.enabled == 'true'
         run: |
           kubectl apply -f k8s/staging/namespace.yaml
           kubectl apply -f k8s/staging/configmap.yaml
 
       - name: Apply staging Secret from repository secrets
-        if: steps.gate.outputs.enabled == 'true'
         env:
           STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
           STAGING_API_ADMIN_KEY: ${{ secrets.STAGING_API_ADMIN_KEY }}
@@ -167,7 +166,6 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply Deployments, Services and HPA
-        if: steps.gate.outputs.enabled == 'true'
         run: |
           kubectl apply \
             -f k8s/indexer-deployment.yaml \
@@ -176,7 +174,6 @@ jobs:
             -n "${STAGING_NAMESPACE}"
 
       - name: Roll out new images
-        if: steps.gate.outputs.enabled == 'true'
         run: |
           kubectl set image deployment/pero-indexer \
             indexer="${INDEXER_IMAGE}:${IMAGE_TAG}" -n "${STAGING_NAMESPACE}"
@@ -184,13 +181,17 @@ jobs:
             frontend="${FRONTEND_IMAGE}:${IMAGE_TAG}" -n "${STAGING_NAMESPACE}"
 
       - name: Wait for rollouts to complete
-        if: steps.gate.outputs.enabled == 'true'
         run: |
-          kubectl rollout status deployment/pero-indexer -n "${STAGING_NAMESPACE}" --timeout=5m
-          kubectl rollout status deployment/frontend -n "${STAGING_NAMESPACE}" --timeout=5m
+          kubectl rollout status deployment/pero-indexer -n "${STAGING_NAMESPACE}" --timeout=5m &
+          indexer_pid=$!
+          kubectl rollout status deployment/frontend -n "${STAGING_NAMESPACE}" --timeout=5m &
+          frontend_pid=$!
+          status=0
+          wait "$indexer_pid" || status=$?
+          wait "$frontend_pid" || status=$?
+          exit "$status"
 
       - name: Run testnet smoke tests
-        if: steps.gate.outputs.enabled == 'true'
         run: |
           # Tunnel the staging frontend service to the runner, then exercise the
           # full path: nginx → /api/* → indexer → PostgreSQL.
@@ -204,7 +205,6 @@ jobs:
           ./scripts/smoke-test.sh http://127.0.0.1:8080
 
       - name: Deploy summary
-        if: steps.gate.outputs.enabled == 'true'
         run: |
           echo "### Staging deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "- namespace: \`${STAGING_NAMESPACE}\`" >> "$GITHUB_STEP_SUMMARY"
