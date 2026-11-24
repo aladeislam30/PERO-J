@@ -31,8 +31,14 @@ export async function pollOnce(db = pool, submit = submitExpiredMarket) {
     "SELECT id, slug, category, params FROM markets WHERE ends_at <= NOW() AND status = 'open' ORDER BY ends_at",
   );
   for (const market of rows) {
-    if (await submit(db, market)) {
-      metrics.marketsSubmitted++;
+    // One market's failure must not stop the rest from being processed.
+    try {
+      if (await submit(db, market)) {
+        metrics.marketsSubmitted++;
+      }
+    } catch (err) {
+      metrics.pollErrors++;
+      console.error(`[oracle] market ${market.id} failed: ${err.message}`);
     }
   }
   metrics.polls++;
