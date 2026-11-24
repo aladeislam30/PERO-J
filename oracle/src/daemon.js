@@ -22,7 +22,7 @@ export const metrics = {
 /** Scan for expired open markets and submit each one. */
 export async function pollOnce(db = pool, submit = submitExpiredMarket) {
   const { rows } = await db.query(
-    "SELECT id, category, params FROM markets WHERE ends_at <= NOW() AND status = 'open' ORDER BY ends_at",
+    "SELECT id, slug, category, params FROM markets WHERE ends_at <= NOW() AND status = 'open' ORDER BY ends_at",
   );
   for (const market of rows) {
     if (await submit(db, market)) {

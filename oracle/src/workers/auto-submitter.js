@@ -1,23 +1,24 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { adapters, categoryAdapters } from "../adapters.js";
+import { registry } from "../adapters/index.js";
 
 const execFileAsync = promisify(execFile);
 
 /**
- * Query every adapter mapped to the market's category and require unanimous
+ * Query every adapter the registry maps to the market and require unanimous
  * agreement. Any adapter failure or disagreement throws, aborting submission.
  *
- * @param {{ category: string, params: object }} market
- * @param {typeof adapters} [impl]
+ * @param {{ id: string, slug?: string, category?: string, params: object }} market
+ * @param {{ resolve: Function }} [adapters]
  * @returns {Promise<boolean>}
  */
-export async function determineOutcome(market, impl = adapters) {
-  const names = categoryAdapters[market.category];
-  if (!names) {
-    throw new Error(`no adapters configured for category "${market.category}"`);
+export async function determineOutcome(market, adapters = registry) {
+  const outcomes = await Promise.all(
+    adapters.resolve(market).map((adapter) => adapter.resolve(market.params)),
+  );
+  if (outcomes.some((outcome) => typeof outcome !== "boolean")) {
+    throw new Error(`adapter returned a non-boolean outcome for market ${market.id}`);
   }
-  const outcomes = await Promise.all(names.map((n) => impl[n](market.params)));
   if (new Set(outcomes).size !== 1) {
     throw new Error(
       `adapters disagree for market ${market.id}: ${outcomes.join(",")}`,
@@ -62,7 +63,7 @@ export async function submitOutcomeOnChain(marketId, outcome) {
  * next poll; nothing is submitted when external data cannot be fetched.
  *
  * @param {{ query: Function }} db
- * @param {{ id: string, category: string, params: object }} market
+ * @param {{ id: string, slug?: string, category?: string, params: object }} market
  * @param {{ determine?: Function, submit?: Function }} [deps]
  * @returns {Promise<boolean>} true when an outcome was submitted
  */

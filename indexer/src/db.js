@@ -253,6 +253,19 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_oracle_disputes_market ON oracle_disputes(market_id);
     `,
   },
+  {
+    id: 16,
+    name: "add_oracle_daemon_market_columns",
+    sql: `
+      ALTER TABLE markets
+        ADD COLUMN IF NOT EXISTS slug     TEXT,
+        ADD COLUMN IF NOT EXISTS category TEXT,
+        ADD COLUMN IF NOT EXISTS params   JSONB NOT NULL DEFAULT '{}'::jsonb,
+        ADD COLUMN IF NOT EXISTS ends_at  TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS status   TEXT NOT NULL DEFAULT 'open';
+      CREATE INDEX IF NOT EXISTS idx_markets_status_ends_at ON markets(status, ends_at);
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {

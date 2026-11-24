@@ -1,4 +1,37 @@
-# Oracle adapters
+# Oracle
+
+## Pluggable adapters
+
+Every provider used by the daemon extends `BaseAdapter` (`src/adapters/base.js`)
+and implements `resolve(params): Promise<boolean>`, throwing when no outcome can
+be trusted. The base class supplies a per-adapter token bucket (each attempt,
+retries included, spends a token), timeouts, and bounded exponential backoff for
+network errors, HTTP 429 and 5xx. `Retry-After` is honoured up to `maxDelayMs`.
+
+`AdapterRegistry` selects adapters by market slug (exact, or prefix such as
+`crypto-*`) and falls back to the market category. All selected adapters must
+agree. The daemon reads `slug` only from the `markets` row; rows without one use
+their category. To add a provider:
+
+```js
+class MyAdapter extends BaseAdapter {
+  constructor(options) {
+    super({ name: "mine", rateLimit: { capacity: 5, refillPerSecond: 1 }, ...options });
+  }
+  async resolve(params) {
+    const data = await this.getJson("https://provider.example/price");
+    return priceOutcome(parsePrice(data?.price, this.name), params);
+  }
+}
+registry.register(new MyAdapter()).routeSlug("mine-*", ["mine"]);
+```
+
+Keys: `COINMARKETCAP_API_KEY`, `ODDSAPI_API_KEY`, `NOAA_API_TOKEN`, and
+`POLITICS_FEED_URL` / `POLITICS_FEED_API_KEY` (politics is registered only when
+its feed URL is set). Limits are per process; replicas sharing a key must divide
+the quota between them.
+
+## Source factories
 
 Dependency-free Node.js 20+ adapters for resolving political, weather, and
 launch outcomes. Each adapter accepts an injectable `fetchImpl` for integration
