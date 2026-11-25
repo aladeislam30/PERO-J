@@ -1064,6 +1064,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`4242992`](../../commit/424299233378789152ad6fbaa67217e87426f75e))
+
 - Auto-update CHANGELOG.md [skip ci] ([`25e392a`](../../commit/25e392abc068e5c7a7e6c84c6ef37d464b965e7f))
 
 - Auto-update CHANGELOG.md [skip ci] ([`a20f195`](../../commit/a20f1958e4705dbf0e54709d73cf44f05b7379c8))
@@ -1512,6 +1514,18 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add adapter freshness check, external API adapters, and resolution audit records (Closes [#1129](../../issues/1129), Closes [#1130](../../issues/1130), Closes [#1131](../../issues/1131), Closes [#1132](../../issues/1132)) ([`2f6a901`](../../commit/2f6a9016aeaa6e06c86752c6496144ead8d45587))
+
+- Build scheduler daemon, Redis event pub/sub, telemetry, and integration test (Closes [#1118](../../issues/1118), Closes [#1119](../../issues/1119), Closes [#1120](../../issues/1120), Closes [#1121](../../issues/1121)) ([`ad07123`](../../commit/ad071239866ca01dd8caca2971acb9f3ddfae569))
+
+- Implement multi-adapter consensus, auto-submission, auto-challenge, and batch upserts (Closes [#1117](../../issues/1117), Closes [#1122](../../issues/1122), Closes [#1123](../../issues/1123), Closes [#1124](../../issues/1124)) ([`f1f3e89`](../../commit/f1f3e89784988d1055eca7c52a99222ed8a26e5b))
+
+- Implement Prometheus metrics, RPC retry jitter, schema validation, and drift detector (Closes [#1113](../../issues/1113), Closes [#1114](../../issues/1114), Closes [#1115](../../issues/1115), Closes [#1116](../../issues/1116)) ([`33f57ca`](../../commit/33f57cafc0c94d323382da9ff23ccbb439066eed))
+
+- Implement DLQ retry worker, reorg detection, backfill runner, and advisory lock (Closes [#1109](../../issues/1109), Closes [#1110](../../issues/1110), Closes [#1111](../../issues/1111), Closes [#1112](../../issues/1112)) ([`65ad7b8`](../../commit/65ad7b8dda985958ef1361116ea8be0330e7a402))
+
+- Collapse event dispatchers into unified routing registry and wire handlers (Closes [#1105](../../issues/1105), Closes [#1106](../../issues/1106), Closes [#1107](../../issues/1107), Closes [#1108](../../issues/1108)) ([`769ebec`](../../commit/769ebec0b94e027bb9c930e016bf9d1bb7c067a1))
 
 - Add council events, bet limits, sybil resistance, and token burn (Closes [#1101](../../issues/1101), Closes [#1102](../../issues/1102), Closes [#1103](../../issues/1103), Closes [#1104](../../issues/1104)) ([`fa3f82b`](../../commit/fa3f82b01d0ebe874f1222925ab69300d776f930))
 
@@ -2236,6 +2250,8 @@ Add a tests/integration/ directory with stub tests that document the
 
 
 ### Security
+
+- Implement circuit breaker, hot-wallet monitoring, signatures, and auth hardening (Closes [#1125](../../issues/1125), Closes [#1126](../../issues/1126), Closes [#1127](../../issues/1127), Closes [#1128](../../issues/1128)) ([`b23878c`](../../commit/b23878c288437955841523b1ffce7e9a5ea16766))
 
 - Add input sanitization and length limits on market fields ([#1031](../../issues/1031)) ([`2e08a8a`](../../commit/2e08a8a0490b6f195126cac09f532324cd2e9226))
 
