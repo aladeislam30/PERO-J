@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- [#818](../../issues/818) make database connection pool size configurable via DATABASE_POOL_SIZE ([`91ac58f`](../../commit/91ac58f14f1b1efa80b82caafc2992d092690d45))
+
 - Harden staging deployment workflow ([`2e3ce9b`](../../commit/2e3ce9bc53f1ec9ed86a2fca572d6cdf549cce0a))
 
 - Sanitize query params and validate sort fields ([#1153](../../issues/1153)) ([`3892704`](../../commit/38927049dba2c3f58f349c7d151299073473a614))
@@ -1068,6 +1070,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`929b861`](../../commit/929b861dc02b95d098c4d7a240e499a7e9fbc75b))
+
 - Auto-update CHANGELOG.md [skip ci] ([`e575b5c`](../../commit/e575b5c878e864b6ac88d2a32185a29455d77562))
 
 - Auto-update CHANGELOG.md [skip ci] ([`11083b8`](../../commit/11083b87f0ced65e16117dbab660c72377439c46))
@@ -1564,6 +1568,8 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- [#1172](../../issues/1172) add user profile bond escrow tracking section (escrowed, returned, slashed) ([`544a652`](../../commit/544a6523ad20f2b05c28c70be54af2f8081f5e1d))
 
 - Add multi-wallet Stellar connection support ([`63b2d7d`](../../commit/63b2d7d5ef387ebbd385ef2f98bedf4626c72ef8))
 
