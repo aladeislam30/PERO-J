@@ -65,6 +65,33 @@ export interface ChallengeResponse {
   outcome: ProposedOutcome;
 }
 
+export interface FinalizeOutcomeResponse {
+  ok: boolean;
+  tx_hash?: string;
+  outcome: ProposedOutcome;
+}
+
+export type BondRole = "submitter" | "challenger";
+export type BondStatus = "escrowed" | "returned" | "slashed";
+
+export interface BondPosition {
+  id: string;
+  market_id: string;
+  market_title: string;
+  role: BondRole;
+  amount: string;
+  status: BondStatus;
+  reward?: string;
+  tx_hash?: string;
+  created_at?: string;
+  resolved_at?: string;
+}
+
+export interface BondsResponse {
+  bonds: BondPosition[];
+  total: number;
+}
+
 export interface CouncilVote {
   voter: string;
   vote: "uphold" | "overturn" | "abstain";
@@ -323,6 +350,9 @@ export const api = {
     resilientGet<ProposedOutcome>(`/outcomes/${id}`, () => fetchOnChainOutcome(id)),
   challengeOutcome: (id: string, payload: { challenger: string; bond: string; signed_xdr: string }) =>
     post<ChallengeResponse>(`/outcomes/${id}/challenge`, payload),
+  finalizeOutcome: (id: string, payload: { caller: string; signed_xdr?: string }) =>
+    post<FinalizeOutcomeResponse>(`/outcomes/${id}/finalize`, payload),
+  bonds:            (address: string)                     => get<BondsResponse>(`/bonds/${address}`),
   dispute:          (marketId: string)                    =>
     resilientGet<DisputeDetail>(`/disputes/${marketId}`, () => fetchOnChainDispute(marketId)),
   streamEvents,
