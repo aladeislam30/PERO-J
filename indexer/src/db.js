@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import pg from "pg";
 import { createHash } from "node:crypto";
-import { eventEmitter } from "./events.js";
+import { emitBetEventUpdate, eventEmitter } from "./events.js";
 import { tagSqlWithRequestId } from "./requestContext.js";
 import { observeHistogram } from "./metrics.js";
 
@@ -446,6 +446,7 @@ export const db = {
   async upsertEvent(ev) {
     await insertEvent(pool, ev);
     eventEmitter.emit("event", ev);
+    emitBetEventUpdate(ev);
   },
 
   /**
@@ -484,6 +485,7 @@ export const db = {
 
     for (const ev of events) {
       eventEmitter.emit("event", ev);
+      emitBetEventUpdate(ev);
     }
   },
 

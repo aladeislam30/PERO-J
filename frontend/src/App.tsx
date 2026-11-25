@@ -4,6 +4,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import Footer from "./components/Footer";
 import { ToastProvider } from "./components/Toast";
 import Home from "./pages/Home";
+import MarketsPage from "./pages/MarketsPage";
 import ContractsPage from "./pages/ContractsPage";
 import ContractPage from "./pages/ContractPage";
 import WalletPage from "./pages/WalletPage";
@@ -30,6 +31,7 @@ export default function App() {
         <main style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/markets" element={<MarketsPage />} />
             <Route path="/contracts" element={<ContractsPage />} />
             <Route path="/contract/:id" element={<ContractPage />} />
             <Route path="/wallet/:address" element={<WalletPage />} />

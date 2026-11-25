@@ -1,3 +1,4 @@
+
 import Redis from "ioredis";
 
 // ---------------------------------------------------------------------------
@@ -93,78 +94,8 @@ class InMemoryRedisStub {
 export function getRedisClient() {
   if (_client === undefined) {
     _client = process.env.REDIS_URL
+
       ? new Redis(process.env.REDIS_URL, {
           maxRetriesPerRequest: 1,
           enableOfflineQueue: false,
         })
-      : new InMemoryRedisStub();
-    _client.on?.("error", (err) => console.warn(`[redis:client] ${err.message}`));
-  }
-  return _client;
-}
-
-/**
- * Return the shared Redis subscriber connection (pub/sub).
- * Uses a separate connection from the main client as required by ioredis —
- * a connection in subscribe mode cannot issue regular commands.
- * Falls back to the same in-memory stub in non-Redis environments.
- */
-export function getRedisSubscriber() {
-  if (_subscriber === undefined) {
-    _subscriber = process.env.REDIS_URL
-      ? new Redis(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1,
-          enableOfflineQueue: false,
-        })
-      : new InMemoryRedisStub();
-    _subscriber.on?.("error", (err) =>
-      console.warn(`[redis:subscriber] ${err.message}`)
-    );
-  }
-  return _subscriber;
-}
-
-/**
- * Reset both singleton instances.
- * Used by tests to get a fresh stub between test cases so stale cached
- * state from one test cannot bleed into the next.
- */
-export function resetRedis() {
-  _client = undefined;
-  _subscriber = undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Legacy alias kept for backward compatibility with callers that use getRedis()
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use getRedisClient() instead. */
-export function getRedis() {
-  return getRedisClient();
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Publish a JSON message to a Redis pub/sub channel.
- * Never throws — Redis failures must not block the caller (e.g. the indexing
- * transaction). Returns true on success, false on failure or when Redis is
- * not configured.
- *
- * @param {string} channel
- * @param {object} message
- * @param {any} [redis]
- * @returns {Promise<boolean>}
- */
-export async function publish(channel, message, redis = getRedisClient()) {
-  if (!redis) return false;
-  try {
-    await redis.publish(channel, JSON.stringify(message));
-    return true;
-  } catch (err) {
-    console.warn(`[redis] publish to ${channel} failed: ${err.message}`);
-    return false;
-  }
-}
