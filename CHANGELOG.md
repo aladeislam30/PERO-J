@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`a64c187`](../../commit/a64c1875ec8c82ef348d316e0fe39afdd8a557c0))
+
 - Auto-update CHANGELOG.md [skip ci] ([`f01b630`](../../commit/f01b630e57b251def8ef443d327fff65e1c3a077))
 
 - Auto-update CHANGELOG.md [skip ci] ([`a39bf18`](../../commit/a39bf1857f99d34148945cb457da807cce9f19c1))
@@ -2430,6 +2432,8 @@ Bumps [lru-cache](https://github.com/isaacs/node-lru-cache) from 11.0.2 to 11.5.
 
 
 ### Simple
+
+- Batch fix 3 issues ([`56b9c14`](../../commit/56b9c14da5ba4eda35acbc4fd687ede84a726c14))
 
 - Batch fix 4 issues ([`b105bd0`](../../commit/b105bd0f4acb84011d9a34d5e4133e1bb4919b30))
 
