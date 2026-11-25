@@ -1110,6 +1110,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`51c9ea9`](../../commit/51c9ea909d970ba93b679ed130f120fb3ce1e791))
+
 - Auto-update CHANGELOG.md [skip ci] ([`5da0500`](../../commit/5da0500e4fbefcdcdc1f5af438e48de33e977fe9))
 
 - Auto-update CHANGELOG.md [skip ci] ([`e961884`](../../commit/e961884682d6e601f7e4365e2cae4feec2b24d6e))
@@ -2515,6 +2517,67 @@ Add a tests/integration/ directory with stub tests that document the
 
 
 ### Build
+
+- Bump eslint from 9.9.0 to 10.15.0 in /indexer ([`a3de221`](../../commit/a3de221928d8280f0f4fabce59bdef9072ca01a4))
+
+Bumps [eslint](https://github.com/eslint/eslint) from 9.9.0 to 10.15.0.
+  - [Release notes](https://github.com/eslint/eslint/releases)
+  - [Commits](https://github.com/eslint/eslint/compare/v9.9.0...v10.15.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: eslint
+    dependency-version: 10.15.0
+    dependency-type: direct:development
+    update-type: version-update:semver-major
+  ...
+
+
+- Bump @stellar/stellar-sdk from 12.3.0 to 17.4.0 in /indexer ([`ec89a6a`](../../commit/ec89a6a95c4b4c5d28321ff742ccf36a6542ad91))
+
+Bumps [@stellar/stellar-sdk](https://github.com/stellar/js-stellar-sdk) from 12.3.0 to 17.4.0.
+  - [Release notes](https://github.com/stellar/js-stellar-sdk/releases)
+  - [Changelog](https://github.com/stellar/js-stellar-sdk/blob/main/CHANGELOG.md)
+  - [Commits](https://github.com/stellar/js-stellar-sdk/compare/v12.3.0...v17.4.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: "@stellar/stellar-sdk"
+    dependency-version: 17.4.0
+    dependency-type: direct:production
+    update-type: version-update:semver-major
+  ...
+
+
+- Bump pg from 8.12.0 to 8.23.1 in /indexer ([`a630165`](../../commit/a630165345d6b7cd8c55f1633ed0ce24b80c61d1))
+
+Bumps [pg](https://github.com/brianc/node-postgres/tree/HEAD/packages/pg) from 8.12.0 to 8.23.1.
+  - [Changelog](https://github.com/brianc/node-postgres/blob/master/CHANGELOG.md)
+  - [Commits](https://github.com/brianc/node-postgres/commits/pg@8.23.1/packages/pg)
+
+  ---
+  updated-dependencies:
+  - dependency-name: pg
+    dependency-version: 8.23.1
+    dependency-type: direct:production
+    update-type: version-update:semver-minor
+  ...
+
+
+- Bump globals from 15.9.0 to 17.14.0 in /indexer ([`79b01e0`](../../commit/79b01e0277334c6f7e2b70addbde760891af6734))
+
+Bumps [globals](https://github.com/sindresorhus/globals) from 15.9.0 to 17.14.0.
+  - [Release notes](https://github.com/sindresorhus/globals/releases)
+  - [Commits](https://github.com/sindresorhus/globals/compare/v15.9.0...v17.14.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: globals
+    dependency-version: 17.14.0
+    dependency-type: direct:development
+    update-type: version-update:semver-major
+  ...
+
 
 - Update soroban-sdk requirement in /contracts/explorer ([`9ba9db7`](../../commit/9ba9db70d55175862fa92772943b0a8d296b2410))
 
