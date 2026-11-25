@@ -33,6 +33,27 @@ services:
     depends_on:
       - prometheus
 
+  # Evaluates the stuck-market and council-inactivity alert rules
+  # (MarketStuckInUnresolved, CouncilVoteStalled) and pages the operations team.
+  alert-rules:
+    image: prom/prometheus:v2.51.0
+    container_name: peroj-alert-rules
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts:/etc/prometheus/alerts:ro
+      - alert-rules-data:/prometheus
+    environment:
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      - OPERATIONS_PAGER_ROUTE=operations
+    depends_on:
+      - alertmanager
+
 volumes:
   prometheus-data:
   alertmanager-data:
+  alert-rules-data:

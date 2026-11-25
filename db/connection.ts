@@ -85,4 +85,27 @@ export function getPoolMetrics(pool: Pool, configuredMax?: number): PoolMetrics 
   };
 }
 
+/**
+ * Ensures the consumed-nonce table used for oracle replay protection exists.
+ *
+ * The unique constraint on `(provider_id, nonce)` guarantees that an identical
+ * signed payload can only ever be consumed once, so replays are rejected at the
+ * database level even under concurrent submissions.
+ */
+export async function ensureOracleNonceTable(pool: Pool): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS oracle_consumed_nonces (
+      id BIGSERIAL PRIMARY KEY,
+      provider_id TEXT NOT NULL,
+      nonce TEXT NOT NULL,
+      market_id TEXT NOT NULL,
+      chain_id BIGINT NOT NULL,
+      domain_separator TEXT NOT NULL,
+      signed_at TIMESTAMPTZ NOT NULL,
+      consumed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT oracle_consumed_nonces_provider_nonce_key UNIQUE (provider_id, nonce)
+    )
+  `);
+}
+
 export default createConnectionPool;

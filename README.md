@@ -588,3 +588,6 @@ PRs welcome. Please open an issue first for large changes.
 - [REST API Reference](docs/rest-api.md)
 - [Register Contract Guide](docs/register-contract.md)
 - [Bonds, Challenge Windows & Slashing Rules](docs/bonds-challenge-slashing.md)
+
+<!-- handsoff-issue-1198 -->
+- #1198: feat(monitoring): configure alert rules for indexer stall (lag > 100 ledgers) and RPC failure bursts
