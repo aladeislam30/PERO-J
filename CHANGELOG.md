@@ -1068,6 +1068,17 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`cefa0eb`](../../commit/cefa0eb1f0185f39434d791e73a7e0554c716e81))
+
+- Document the optimistic oracle lifecycle ([`9c96675`](../../commit/9c96675b692de2388a9fbad431f57970c087aaf2))
+
+Add state diagrams, bond formulas, challenge windows, council quorum,
+  incentives and submitter/disputer examples, with an explicit record of
+  what the in-tree contracts implement today.
+
+  Closes [#1138](../../issues/1138)
+
+
 - Auto-update CHANGELOG.md [skip ci] ([`d81fac0`](../../commit/d81fac05b25683ab807148b3d3f6f795c1e5048e))
 
 - Auto-update CHANGELOG.md [skip ci] ([`5037c75`](../../commit/5037c7518a264b184e26164a6f92b45953fc2abc))
@@ -1545,6 +1556,17 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Auto-finalize uncontested submissions ([`5663664`](../../commit/566366403829aca3e6073ffd25a714fa12372ede))
+
+Add a daemon worker, on its own one-minute loop, that calls
+  finalize_outcome for undisputed submissions past their challenge
+  deadline. Claims use an expiring lease so a crashed worker's market is
+  retried. Contract calls are serialized per worker key and no longer leak
+  the key through execFile error messages.
+
+  Refs [#1135](../../issues/1135)
+
 
 - Halt resolution on bond escrow invariant mismatch ([`bb8f046`](../../commit/bb8f04659e576b0177342dcacca3471893d040a3))
 
@@ -2330,12 +2352,36 @@ Closes [#988](../../issues/988)
 
 ### Refactoring
 
+- Pluggable adapters with built-in rate limiting ([`fc02119`](../../commit/fc021195f570a744b26896d26daaad73a7798cac))
+
+Add BaseAdapter (token bucket, timeouts, bounded retries) and an
+  AdapterRegistry resolving adapters by market slug, then category.
+  Convert Binance, CoinMarketCap and TheOddsAPI, and wrap the politics and
+  science/weather sources in the same interface. Reject null prices,
+  non-numeric thresholds and tied scores that previously resolved wrongly.
+
+  Add the package scripts and lockfile the oracle CI job expects, and the
+  market columns the daemon queries.
+
+  Closes [#1136](../../issues/1136)
+
+
 - Configure oracle bond parameters ([`e53a56d`](../../commit/e53a56d79981152494f5bcc1f248ece5492078a3))
 
 - Add reusable BaseDataProviderClient with rate-limiting and retries ([`4c9413a`](../../commit/4c9413af2b8bb2212ba87c308d74b1bee2ac6123))
 
 
 ### Testing
+
+- Cover provider outages and schema breaks ([`e039c96`](../../commit/e039c960cf38fff695cf830cef13d3c3e013231d))
+
+Drive the real poll loop through nock-simulated HTTP 500s, resets,
+  timeouts, truncated bodies, invalid JSON and missing or malformed
+  fields, asserting failures are logged, nothing is submitted, and other
+  markets still resolve. Isolate per-market errors in pollOnce.
+
+  Closes [#1137](../../issues/1137)
+
 
 - Add API integration tests for pagination, filtering and errors ([#1154](../../issues/1154)) ([`8720fe8`](../../commit/8720fe8c8924c091cb9e3ee544d8f2f0094da5e5))
 
