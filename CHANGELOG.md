@@ -8,6 +8,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- [#1203](../../issues/1203) feat(monitoring): configure synthetic probe monitoring fronte ([`a0e5702`](../../commit/a0e5702b48142d6626df3fe41c729c61f166a08c))
+
+Closes [#1203](../../issues/1203)
+
+
+- [#1202](../../issues/1202) docs(monitoring): compile runbook index mapping each operatio ([`fe70c66`](../../commit/fe70c66e718dddbd20a9f0078e0a3a35d5ecad05))
+
+Closes [#1202](../../issues/1202)
+
+
+- [#1201](../../issues/1201) feat(monitoring): deploy public status page displaying networ ([`27a04ab`](../../commit/27a04ab3ca1ec8cd295c5fc9c4b67ee285176060))
+
+Closes [#1201](../../issues/1201)
+
+
+- [#1200](../../issues/1200) feat(monitoring): implement Grafana dashboards for pipeline h ([`40aea53`](../../commit/40aea5382a698a7eaeead0fbb59dff6d4ede5160))
+
+Closes [#1200](../../issues/1200)
+
+
 - [#818](../../issues/818) make database connection pool size configurable via DATABASE_POOL_SIZE ([`91ac58f`](../../commit/91ac58f14f1b1efa80b82caafc2992d092690d45))
 
 - Harden staging deployment workflow ([`2e3ce9b`](../../commit/2e3ce9bc53f1ec9ed86a2fca572d6cdf549cce0a))
@@ -1069,6 +1089,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`e961884`](../../commit/e961884682d6e601f7e4365e2cae4feec2b24d6e))
 
 - Auto-update CHANGELOG.md [skip ci] ([`2e59e2f`](../../commit/2e59e2f71087c21529d846c43cf05ee746c2f35b))
 
