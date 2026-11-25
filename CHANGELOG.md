@@ -1064,6 +1064,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`25e392a`](../../commit/25e392abc068e5c7a7e6c84c6ef37d464b965e7f))
+
 - Auto-update CHANGELOG.md [skip ci] ([`a20f195`](../../commit/a20f1958e4705dbf0e54709d73cf44f05b7379c8))
 
 - Note that no duplicate 0008 migration prefix exists on main ([#1155](../../issues/1155)) ([`18f1928`](../../commit/18f1928f0ff87173c889a6904c3c7b6918b80b01))
@@ -1510,6 +1512,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add council events, bet limits, sybil resistance, and token burn (Closes [#1101](../../issues/1101), Closes [#1102](../../issues/1102), Closes [#1103](../../issues/1103), Closes [#1104](../../issues/1104)) ([`fa3f82b`](../../commit/fa3f82b01d0ebe874f1222925ab69300d776f930))
 
 - Add migration linter and CI workflow ([#1156](../../issues/1156)) ([`41b61ba`](../../commit/41b61ba5bf50cca6d35e2f84b581e66acbc7eb08))
 
