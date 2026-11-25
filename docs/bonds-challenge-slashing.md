@@ -16,15 +16,30 @@ To deter dishonest data submissions and malicious disputes, PERO-J enforces an o
 All participants proposing oracle outcomes or challenging state transitions must lock collateral (bonds).
 
 ### 2.1 Submitter Bond
-- **Base Bond**: `1,000 PERO` (or equivalent in XLM).
-- **Dynamic Liquidity Scaling**: High-volume contracts require a bond scaling linearly with Total Value Locked (TVL) or disputed amount:
-  $$\text{Required Bond} = \max\left(1000, \frac{\text{TVL} \times \text{Risk Factor}}{10,000}\right)$$
+- **Base Bond**: `100 XLM`.
+- **Dynamic Pool Scaling**: The required bond scales at 1% of the market's total YES and NO pools:
+  $$\text{Required Bond} = \max\left(\text{Base Bond}, \frac{\text{Total Pool} \times 100}{10,000}\right)$$
 - **Escrow**: Bonds are locked in the smart contract escrow during the entirety of the challenge window.
 - **Release**: If no challenge is filed before the challenge window lapses, the bond is returned in full along with any protocol rewards.
 
 ### 2.2 Challenger Bond
-- Challengers must deposit a bond matching `100%` of the submitter's posted bond to file an official challenge.
+- **Base Bond**: `200 XLM`; above the base threshold, it scales at the same 1% of total pool as the submitter bond.
+- The contract exposes the current required amount and rejects challenges below it.
 - Prevents denial-of-service and griefing challenges.
+
+### 2.3 Admin-Configurable Oracle Parameters
+The market admin can update the `OracleConfig` in contract instance storage with `set_oracle_config`; `get_oracle_config` returns the active values. Bond amounts are denominated in stroops, while fee shares are basis points.
+
+| Parameter | Default | Accepted range |
+| :--- | :--- | :--- |
+| Submitter base bond | `100 XLM` | `1 to 1,000,000 XLM` |
+| Disputer base bond | `200 XLM` | `1 to 1,000,000 XLM` |
+| Challenge window | `43,200` ledgers | `1 to 1,000,000` ledgers |
+| Challenger reward share | `50%` (`5,000 bps`) | Shares must sum to `10,000 bps` |
+| Juror reward share | `20%` (`2,000 bps`) | Shares must sum to `10,000 bps` |
+| Treasury fee share | `30%` (`3,000 bps`) | Shares must sum to `10,000 bps` |
+
+The current market contract applies configurable base bonds when calculating submitter and disputer requirements. It stores the challenge-window and fee-share values, but does not yet enforce a timed challenge lifecycle or distribute settled bond shares.
 
 ---
 
