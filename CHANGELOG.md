@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`11083b8`](../../commit/11083b87f0ced65e16117dbab660c72377439c46))
+
 - Auto-update CHANGELOG.md [skip ci] ([`1e5329b`](../../commit/1e5329b2ee79ddffa8e30133c981157f4d7405c7))
 
 - Auto-update CHANGELOG.md [skip ci] ([`77afe59`](../../commit/77afe59c7f07e0c1bf889c0612a7a87a0be88de0))
@@ -1560,6 +1562,8 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Add referral link generator with dynamic social share cards ([`f958641`](../../commit/f9586412f49d73f6ddf2dc21fd8439766c06ace8))
 
 - Add persistent light and dark theme toggle ([`021bd96`](../../commit/021bd968825621017dc0cc33bdeaf09854bc82f6))
 
