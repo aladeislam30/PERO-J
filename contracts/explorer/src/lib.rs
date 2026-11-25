@@ -19,6 +19,7 @@ pub enum Error {
     LimitExceeded     = 4,
     NotInitialized    = 5,
     SlippageExceeded  = 6,
+    InvalidThreshold  = 7,
 }
 
 // ── Input limits ─────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ pub enum DataKey {
     EventSeq,
     IndexerAllowlist,       // → Vec<Address> of trusted event submitters
     MarketPool(u64),        // market_id → MarketPool
+    Council,                // → CouncilConfig
 }
 
 /// Parimutuel market betting pool totals.
@@ -1389,4 +1391,25 @@ mod tests {
         let fetched = client.get_contract(&cid);
         assert_eq!(fetched.name, String::from_str(&env, title_160));
     }
+
+    #[test]
+    fn test_admin_can_add_and_remove_council_members() {
+        let (env, client) = setup!();
+        let admin = Address::generate(&env);
+        let member1 = Address::generate(&env);
+        let member2 = Address::generate(&env);
+        client.init(&admin);
+
+        client.add_council_member(&admin, &member1);
+        client.add_council_member(&admin, &member2);
+        let cfg = client.get_council();
+        assert_eq!(cfg.members.len(), 2);
+        assert_eq!(cfg.threshold, 1);
+
+        client.remove_council_member(&admin, &member1);
+        let after = client.get_council();
+        assert_eq!(after.members.len(), 1);
+        assert_eq!(after.members.get(0).unwrap(), member2);
+    }
 }
+
