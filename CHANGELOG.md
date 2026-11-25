@@ -1057,12 +1057,18 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### CI / CD
 
+- Verify Soroban WASM and staging deployments ([`676f1bd`](../../commit/676f1bd189e2d5193e634034298f6450500b01d3))
+
 - Add cargo audit, npm audit, and dependabot vulnerability scanning ([`fe9d9c1`](../../commit/fe9d9c1174ed4e5537080b803c28984782c24bff))
 
 - Fix frontend Node and lockfile ([`bbf0ec1`](../../commit/bbf0ec1ae4733eb5bde2275dbc0e60b3e50d558d))
 
 
 ### Documentation
+
+- Note checkpoint_state already implemented ([#1162](../../issues/1162)) ([`e949130`](../../commit/e9491304c23529d70655869869b968f18e5caaea))
+
+- Auto-update CHANGELOG.md [skip ci] ([`8b36ee2`](../../commit/8b36ee2abf4ab9c48a55697f84b3cb5b3aea5429))
 
 - Auto-update CHANGELOG.md [skip ci] ([`4242992`](../../commit/424299233378789152ad6fbaa67217e87426f75e))
 
@@ -1514,6 +1520,93 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add Finalize Market button after uncontested challenge window ([`e4817d0`](../../commit/e4817d0d4837058093b3dfe9b6ce2a61258e1f8f))
+
+## Summary
+
+  Closes [#995](../../issues/995)
+
+  When a market’s challenge window ends with no challenge, the outcome is finalizable by any address — but users often miss that they can trigger finalization themselves. Markets were left sitting in a non-claimable state.
+
+  This adds a clear **Finalize Market** action on the market page so anyone can finalize once the challenge deadline has passed, unlock payouts, and move the UI into the claimable state.
+
+  ### What changed
+
+  - On the market page, when `oracle_state === 'submitted'` and the current time is past `challenge_deadline`, show a prominent **Finalize Market** button.
+  - Clicking the button calls `finalize_outcome` on Soroban.
+  - On success:
+    - Show a success/celebration toast
+    - Refresh the page (or update local state) so the market transitions into the claimable UI
+  - Button becomes available as soon as the challenge deadline has expired (no extra delay)
+
+  ### Acceptance criteria
+
+  - [x] Button is shown/enabled when the challenge window has passed uncontested
+  - [x] Finalization transaction is submitted via Soroban `finalize_outcome`
+  - [x] Success path shows feedback and refreshes so the market is claimable
+
+  ### How to test
+
+  1. Open a market in `oracle_state: submitted` with `challenge_deadline` in the past and no challenge.
+  2. Confirm the **Finalize Market** button is visible and enabled.
+  3. Click it, approve the wallet transaction, and verify:
+     - Success toast appears
+     - Page updates to the claimable/finalized state
+
+  ### Notes
+
+  - Finalization is permissionless after an uncontested challenge window, matching on-chain behavior.
+  - No change to challenge or dispute flows — only the post-deadline finalization path
+
+
+- Verify admin can add and remove council addresses ([`5672285`](../../commit/5672285f139a1facb37f7839a53ea16d10d31529))
+
+Define `DataKey::Council` and `Error::InvalidThreshold` for the on-chain council registry and add `test_admin_can_add_and_remove_council_members` in `contracts/explorer/src/lib.rs`.
+
+  Closes [#1092](../../issues/1092), Closes [#1091](../../issues/1091), Closes [#1090](../../issues/1090), Closes [#1089](../../issues/1089)
+
+
+- Add ETag and If-None-Match HTTP caching headers on market endpoints ([`8209fd8`](../../commit/8209fd85580ff60e4f0f90283a4dc93589d1761b))
+
+Add weak ETag + If-None-Match support and Cache-Control headers to the two
+  market read endpoints to eliminate redundant full-payload responses for
+  unchanged market data.
+
+
+- Add oracle submissions endpoints ([`b475534`](../../commit/b4755346ddf71de0ba7753d2179120626cb75d09))
+
+- Bridge SSE hub to Redis pub/sub market channel ([#1148](../../issues/1148)) ([`a52b7d1`](../../commit/a52b7d115dfa4da7be663665b88262416bf15377))
+
+Add marketPubSub adapter with injected Redis interface, reconnect re-subscribe and clean stop
+
+
+- Add SSE server for live market streaming ([#1147](../../issues/1147)) ([`9581cea`](../../commit/9581cea4e54fe51c9719965e813cb373ee4f7667))
+
+Add MarketHub and /stream/markets and /markets/:id/live SSE routes. WebSocket not included (no ws dependency)
+
+
+- Add stale-while-revalidate cache fallback ([#1146](../../issues/1146)) ([`485c3c8`](../../commit/485c3c8e55de6dcc72e2d2bbf4654bb90cf919f4))
+
+Add SwrCache with soft/hard TTL, in-memory LRU fallback and circuit-breaker style degradation on backend errors
+
+
+- Add single-flight cache coalescing ([#1145](../../issues/1145)) ([`bd21116`](../../commit/bd21116ed398622e38f375f25213789d68fe7814))
+
+Add SingleFlight and getOrLoad so concurrent cache misses share one loader call. Not yet wired into routes
+
+
+- Create resolution_audit_logs table ([#1160](../../issues/1160)) ([`a0925a5`](../../commit/a0925a53b247fe1c3c1e6b75927d4f0ab4f006d4))
+
+- Create council_votes table ([#1159](../../issues/1159)) ([`3979383`](../../commit/397938336ff48acfb39dc441c190e2c234cb4b49))
+
+- Add composite indexes on bets ([#1158](../../issues/1158)) ([`63dd56c`](../../commit/63dd56c1a1f7b05fbf73a3d1e5cdeda091dfbdfe))
+
+- Add migrate:status CLI to list applied and pending migrations ([#1157](../../issues/1157)) ([`6e5ccc4`](../../commit/6e5ccc41d91e7c96bec5ce97887d91d11912cddd))
+
+- Add bets archival policy, function and script ([#1163](../../issues/1163)) ([`f279880`](../../commit/f27988068e64efc8a073cdb5047d4a11d623790c))
+
+- Create dlq_events table ([#1161](../../issues/1161)) ([`80a41b9`](../../commit/80a41b9e99e3916da9a10fcbfd704f0547b6c7c7))
 
 - Add adapter freshness check, external API adapters, and resolution audit records (Closes [#1129](../../issues/1129), Closes [#1130](../../issues/1130), Closes [#1131](../../issues/1131), Closes [#1132](../../issues/1132)) ([`2f6a901`](../../commit/2f6a9016aeaa6e06c86752c6496144ead8d45587))
 
@@ -2148,6 +2241,8 @@ Closes [#3](../../issues/3) — Parse ScVal Types to Native JavaScript Types
 
 
 ### Performance
+
+- Add mv_leaderboard_ranks materialized view and refresh ([#1164](../../issues/1164)) ([`fee4ec7`](../../commit/fee4ec7958a1dff4cdc500acf1130554184ae2e2))
 
 - Configure connection pool sizing, idle timeouts, and connection recycling ([#989](../../issues/989)) ([`0a5a368`](../../commit/0a5a36859d6446ff8abc9de0dcfe839144096173))
 
