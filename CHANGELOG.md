@@ -1070,6 +1070,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`daacb20`](../../commit/daacb20a918ca206e9e74b387d275ba2f19774a1))
+
 - Auto-update CHANGELOG.md [skip ci] ([`5155d20`](../../commit/5155d20843d9189b998e387cb872cdd0c69359cd))
 
 - Auto-update CHANGELOG.md [skip ci] ([`8a1ca16`](../../commit/8a1ca1674f63774e8f4fe68d850b02a2ac52443d))
@@ -1572,6 +1574,8 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- [#1169](../../issues/1169) add challenge outcome modal with live countdown and optimistic update ([`498cdf1`](../../commit/498cdf1306473740bc030f207939bf10dab4a336))
 
 - [#1170](../../issues/1170) add public dispute detail page with bonds, votes and timeline ([`fc7132d`](../../commit/fc7132dd0527cfa80f29e63d6a54ca09a937818f))
 
