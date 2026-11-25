@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Harden staging deployment workflow ([`2e3ce9b`](../../commit/2e3ce9bc53f1ec9ed86a2fca572d6cdf549cce0a))
+
 - Sanitize query params and validate sort fields ([#1153](../../issues/1153)) ([`3892704`](../../commit/38927049dba2c3f58f349c7d151299073473a614))
 
 - Audit accessibility (a11y) landmarks, ARIA labels, and keyboard navigation ([`caae887`](../../commit/caae887e40c7c8ede4770bdd998f181b7d13434e))
@@ -1065,6 +1067,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`da29fcf`](../../commit/da29fcf0f077be7686998aafe67636a65f1bbd96))
 
 - Auto-update CHANGELOG.md [skip ci] ([`e8f131e`](../../commit/e8f131ec7b8c6578efbaef9932a41084d1e0a502))
 
