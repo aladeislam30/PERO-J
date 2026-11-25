@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`1e5329b`](../../commit/1e5329b2ee79ddffa8e30133c981157f4d7405c7))
+
 - Auto-update CHANGELOG.md [skip ci] ([`77afe59`](../../commit/77afe59c7f07e0c1bf889c0612a7a87a0be88de0))
 
 - Auto-update CHANGELOG.md [skip ci] ([`cefa0eb`](../../commit/cefa0eb1f0185f39434d791e73a7e0554c716e81))
@@ -1558,6 +1560,8 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Add persistent light and dark theme toggle ([`021bd96`](../../commit/021bd968825621017dc0cc33bdeaf09854bc82f6))
 
 - Add interactive ROI and payout calculator to BetSlip ([`e993f59`](../../commit/e993f59cd9b3c44210f446a0145a0de4e40fa209))
 
