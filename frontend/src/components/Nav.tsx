@@ -89,6 +89,16 @@ export default function Nav() {
     applyTheme(theme);
   }, [theme]);
 
+  // Escape key handler for wallet modal
+  useEffect(() => {
+    if (!walletModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setWalletModalOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [walletModalOpen]);
+
   // Keep in sync with system preference changes (e.g. user changes OS theme)
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -231,7 +241,7 @@ export default function Nav() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h3 style={{ margin: 0, fontSize: 18 }}>Connect a Stellar wallet</h3>
-              <button type="button" aria-label="Close" onClick={() => setWalletModalOpen(false)}>
+              <button type="button" aria-label="Close wallet selection" onClick={() => setWalletModalOpen(false)}>
                 ✕
               </button>
             </div>

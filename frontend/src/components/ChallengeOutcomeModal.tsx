@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 
@@ -49,6 +49,35 @@ export default function ChallengeOutcomeModal({
     return () => clearInterval(timer);
   }, []);
 
+  // Focus trap and Escape key listener for a11y
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "Tab" && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const remainingMs = deadlineMs - now;
   const expired = remainingMs <= 0;
 
@@ -98,6 +127,7 @@ export default function ChallengeOutcomeModal({
       onClick={onClose}
     >
       <div
+        ref={modalRef}
         className="card"
         style={{ maxWidth: 480, width: "100%", display: "flex", flexDirection: "column", gap: 16 }}
         onClick={(e) => e.stopPropagation()}
@@ -106,7 +136,7 @@ export default function ChallengeOutcomeModal({
           <h2 id="challenge-outcome-title" style={{ margin: 0 }}>
             Challenge Proposed Outcome
           </h2>
-          <button aria-label="Close" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18 }}>
+          <button aria-label="Close modal" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18 }}>
             ×
           </button>
         </div>
