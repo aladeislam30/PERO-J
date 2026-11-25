@@ -7,6 +7,7 @@ import { formatOracleDisputes, oracleDisputes } from "./oracleDisputes.js";
 import { health } from "./index.js";
 import { eventEmitter } from "./events.js";
 import { MAX_TITLE_LEN, MAX_DESCRIPTION_LEN } from "./sanitize.js";
+import { parseSortParams } from "./query-validation.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -357,6 +358,10 @@ export function createApp() {
   v1Router.get(
     "/markets",
     asyncHandler(async (req, res) => {
+      const sortParams = parseSortParams(req.query);
+      if (!sortParams.ok) {
+        return res.status(400).json({ error: sortParams.error });
+      }
       const limit = Number(req.query.limit) || 20;
       const cursor = req.query.cursor || null;
       const page = Number(req.query.page) || 1;
