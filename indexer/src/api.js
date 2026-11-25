@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { StrKey } from "@stellar/stellar-sdk";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
+import { registerMarketStream } from "./marketStream.js";
 import { formatOracleDisputes, oracleDisputes } from "./oracleDisputes.js";
 import { health } from "./index.js";
 import { eventEmitter } from "./events.js";
@@ -511,6 +512,9 @@ export function createApp() {
       res.json(result);
     })
   );
+
+  // Live market SSE streams (issue #1147)
+  registerMarketStream(v1Router);
 
   // GET /api/v1/events/stream — Server-Sent Events endpoint for live event feed
   v1Router.get("/events/stream", (req, res) => {
