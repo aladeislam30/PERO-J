@@ -1064,6 +1064,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`a20f195`](../../commit/a20f1958e4705dbf0e54709d73cf44f05b7379c8))
+
 - Note that no duplicate 0008 migration prefix exists on main ([#1155](../../issues/1155)) ([`18f1928`](../../commit/18f1928f0ff87173c889a6904c3c7b6918b80b01))
 
 - Auto-update CHANGELOG.md [skip ci] ([`1805f6d`](../../commit/1805f6de5570c2d5034b90075d2cbfb8b0956e58))
@@ -2243,6 +2245,8 @@ Add a tests/integration/ directory with stub tests that document the
 
 
 ### Simple
+
+- Batch fix 4 issues ([`b105bd0`](../../commit/b105bd0f4acb84011d9a34d5e4133e1bb4919b30))
 
 - Batch fix 2 issues ([`390edc7`](../../commit/390edc779477f721026317308d512239d695f4bc))
 
