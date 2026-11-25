@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`d81fac0`](../../commit/d81fac05b25683ab807148b3d3f6f795c1e5048e))
+
 - Auto-update CHANGELOG.md [skip ci] ([`5037c75`](../../commit/5037c7518a264b184e26164a6f92b45953fc2abc))
 
 - Auto-update CHANGELOG.md [skip ci] ([`a64c187`](../../commit/a64c1875ec8c82ef348d316e0fe39afdd8a557c0))
@@ -1543,6 +1545,30 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Halt resolution on bond escrow invariant mismatch ([`bb8f046`](../../commit/bb8f04659e576b0177342dcacca3471893d040a3))
+
+Continuously compare recorded bonds with the escrow contract's XLM SAC
+  balance and check each bond is returned or slashed in full. A violation
+  trips a persistent circuit breaker, pages operations and blocks automated
+  outcome submission until an operator resets it.
+
+  Restore the dispute_bonds migration and queries, which were lost in a
+  merge, and add a circuit_breakers table.
+
+  Closes [#1134](../../issues/1134)
+
+
+- Escalate council voting inactivity to PagerDuty ([`dcd141b`](../../commit/dcd141bf4fd5dfd06d6de239b3b774fdd60ba782))
+
+Check active disputes hourly for council quorum and page the roster at
+  24h, 48h and 60h of the 72h voting period. Incidents resolve once quorum
+  is reached or the dispute closes; failed notifications are retried.
+
+  Add the package scripts and lockfile the oracle CI job already expects.
+
+  Closes [#1133](../../issues/1133)
+
 
 - Generate OpenAPI spec for all registered endpoints ([#1150](../../issues/1150)) ([`e2547b5`](../../commit/e2547b5ea7cbe9f4e590fd9526e742547d8f5e49))
 
