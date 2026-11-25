@@ -69,6 +69,32 @@ export const SEVERITY_COLORS = {
 } as const;
 
 /**
+ * SLA thresholds for stuck-market and council-inactivity alert rules.
+ */
+export const STUCK_MARKET_SLA_HOURS = 48;
+export const COUNCIL_VOTE_SLA_HOURS = 24;
+export const COUNCIL_MIN_VOTES = 4;
+
+/**
+ * A market that has remained open past its expiry beyond the SLA window.
+ */
+export interface StuckMarket {
+  id: string;
+  endsAtElapsedHours: number;
+  status?: string;
+}
+
+/**
+ * An escalated dispute awaiting council votes.
+ */
+export interface StalledDispute {
+  id: string;
+  elapsedHours: number;
+  votesCast: number;
+  status?: string;
+}
+
+/**
  * In-memory sliding window rate limiter per channel.
  */
 export class ChannelRateLimiter {
@@ -307,52 +333,88 @@ export class NotifierBot {
   }
 
   /**
-   * Helper: Send dispute alert to #oracle-disputes.
+   * Evaluate the `MarketStuckInUnresolved` alert rule:
+   *   count(markets{status="open", ends_at_elapsed_hours > 48}) > 0
+   * Returns the markets that breach the SLA window.
    */
-  async sendOracleDisputeAlert(
-    marketId: string,
-    title: string,
-    description: string,
-    fields?: AlertField[]
-  ): Promise<NotificationResult> {
-    const extraFields: AlertField[] = [
-      { name: "Market ID", value: `\`${marketId}\``, inline: true },
-      ...(fields || []),
-    ];
+  evaluateStuckMarkets(markets: StuckMarket[]): StuckMarket[] {
+    return markets.filter(
+      (m) =>
+        (m.status ?? "open") === "open" &&
+        m.endsAtElapsedHours > STUCK_MARKET_SLA_HOURS
+    );
+  }
 
+  /**
+   * Evaluate the `CouncilVoteStalled` alert rule:
+   *   count(disputes{status="escalated", elapsed_hours > 24, votes_cast < 4}) > 0
+   * Returns the disputes that breach the council SLA window.
+   */
+  evaluateStalledDisputes(disputes: StalledDispute[]): StalledDispute[] {
+    return disputes.filter(
+      (d) =>
+        (d.status ?? "escalated") === "escalated" &&
+        d.elapsedHours > COUNCIL_VOTE_SLA_HOURS &&
+        d.votesCast < COUNCIL_MIN_VOTES
+    );
+  }
+
+  /**
+   * Helper: Page operators when markets remain unhandled past the SLA window.
+   * Includes affected market IDs in the alert annotations.
+   */
+  async sendStuckMarketAlert(
+    markets: StuckMarket[]
+  ): Promise<NotificationResult> {
+    const stuck = this.evaluateStuckMarkets(markets);
+    if (stuck.length === 0) {
+      return { sent: false, destinations: {} };
+    }
+
+    const ids = stuck.map((m) => m.id);
     return this.notify({
-      channel: "oracle-disputes",
-      severity: "warning",
-      title,
-      description,
-      fields: extraFields,
-      url: `/markets/${marketId}/disputes`,
+      channel: "alerts-critical",
+      severity: "critical",
+      title: "MarketStuckInUnresolved",
+      description: `${stuck.length} market(s) open >${STUCK_MARKET_SLA_HOURS}h past expiry without resolution.`,
+      fields: [
+        { name: "Affected Market IDs", value: ids.join(", "), inline: false },
+        {
+          name: "Max Elapsed (h)",
+          value: String(Math.max(...stuck.map((m) => m.endsAtElapsedHours))),
+        },
+      ],
+      metadata: { rule: "MarketStuckInUnresolved", marketIds: ids },
     });
   }
 
   /**
-   * Helper: Send audit log event to #audit-events.
+   * Helper: Page operators when escalated disputes stall in council voting.
+   * Includes affected dispute IDs in the alert annotations.
    */
-  async sendAuditEvent(
-    title: string,
-    description: string,
-    actor: string,
-    fields?: AlertField[]
+  async sendCouncilVoteStalledAlert(
+    disputes: StalledDispute[]
   ): Promise<NotificationResult> {
-    const extraFields: AlertField[] = [
-      { name: "Actor", value: `\`${actor}\``, inline: true },
-      ...(fields || []),
-    ];
+    const stalled = this.evaluateStalledDisputes(disputes);
+    if (stalled.length === 0) {
+      return { sent: false, destinations: {} };
+    }
 
+    const ids = stalled.map((d) => d.id);
     return this.notify({
-      channel: "audit-events",
-      severity: "info",
-      title,
-      description,
-      fields: extraFields,
-      url: `/audit-logs`,
+      channel: "oracle-disputes",
+      severity: "critical",
+      title: "CouncilVoteStalled",
+      description: `${stalled.length} escalated dispute(s) with <${COUNCIL_MIN_VOTES} votes after >${COUNCIL_VOTE_SLA_HOURS}h.`,
+      fields: [
+        { name: "Affected Dispute IDs", value: ids.join(", "), inline: false },
+        {
+          name: "Votes Cast",
+          value: stalled.map((d) => `${d.id}: ${d.votesCast}`).join(", "),
+          inline: false,
+        },
+      ],
+      metadata: { rule: "CouncilVoteStalled", disputeIds: ids },
     });
   }
 }
-
-export const notifier = new NotifierBot();
