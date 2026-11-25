@@ -1066,6 +1066,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`e8f131e`](../../commit/e8f131ec7b8c6578efbaef9932a41084d1e0a502))
+
 - Auto-update CHANGELOG.md [skip ci] ([`4233fed`](../../commit/4233feda9d0803ec22a84d7394423e762736d000))
 
 - Add contract upgrade playbook for live Soroban contracts ([`9669942`](../../commit/9669942e0b1a0b741625cf66d5589abf32033199))
