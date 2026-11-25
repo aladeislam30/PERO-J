@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`a39bf18`](../../commit/a39bf1857f99d34148945cb457da807cce9f19c1))
+
 - Auto-update CHANGELOG.md [skip ci] ([`04d8459`](../../commit/04d845997ff4962a6f16757465b6d209587f5e38))
 
 - Auto-update CHANGELOG.md [skip ci] ([`da29fcf`](../../commit/da29fcf0f077be7686998aafe67636a65f1bbd96))
@@ -2331,6 +2333,38 @@ Add a tests/integration/ directory with stub tests that document the
   - Fix invalid DUMMY_SOURCE strkey in src/validateSep41.js (crashed at module load
     when Address.fromString() validated the checksum)
   - Fix invalid DUMMY_SOURCE strkey in src/sep41Metadata.js (crashed new Account())
+
+
+
+### Build
+
+- Update soroban-sdk requirement in /contracts/explorer ([`9ba9db7`](../../commit/9ba9db70d55175862fa92772943b0a8d296b2410))
+
+Updates the requirements on [soroban-sdk](https://github.com/stellar/rs-soroban-sdk) to permit the latest version.
+  - [Release notes](https://github.com/stellar/rs-soroban-sdk/releases)
+  - [Commits](https://github.com/stellar/rs-soroban-sdk/compare/v21.7.7...v29.0.1)
+
+  ---
+  updated-dependencies:
+  - dependency-name: soroban-sdk
+    dependency-version: 29.0.1
+    dependency-type: direct:production
+  ...
+
+
+- Bump lru-cache from 11.0.2 to 11.5.3 in /indexer ([`2fa42c0`](../../commit/2fa42c06299cced8f963526102a74712044ed7fd))
+
+Bumps [lru-cache](https://github.com/isaacs/node-lru-cache) from 11.0.2 to 11.5.3.
+  - [Changelog](https://github.com/isaacs/node-lru-cache/blob/main/CHANGELOG.md)
+  - [Commits](https://github.com/isaacs/node-lru-cache/compare/v11.0.2...v11.5.3)
+
+  ---
+  updated-dependencies:
+  - dependency-name: lru-cache
+    dependency-version: 11.5.3
+    dependency-type: direct:production
+    update-type: version-update:semver-minor
+  ...
 
 
 
