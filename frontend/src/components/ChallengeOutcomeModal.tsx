@@ -86,6 +86,7 @@ export default function ChallengeOutcomeModal({
       onChallenge ? onChallenge(outcome.outcomeId) : api.challengeOutcome(outcome.outcomeId),
     onMutate: async () => {
       // Optimistic UI: mark the outcome as challenged immediately.
+      
       await queryClient.cancelQueries({ queryKey: ["outcome", outcome.outcomeId] });
       const previous = queryClient.getQueryData(["outcome", outcome.outcomeId]);
       queryClient.setQueryData(["outcome", outcome.outcomeId], (old: any) =>
