@@ -2,6 +2,7 @@ const express = require('express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 const db = require('./db');
+const { createMarketStreamRouter } = require('./routes/marketStream');
 
 const app = express();
 
@@ -36,12 +37,29 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Max-Age', '86400');
+    // Allow EventSource (SSE) to read the stream from allowed origins.
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Cache-Control, Connection');
   }
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
   next();
 });
+
+// SSE endpoints must not be buffered by proxies; disable compression-style
+// buffering for text/event-stream responses.
+app.use((req, res, next) => {
+  if (req.path.endsWith('/stream')) {
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+  }
+  next();
+});
+
+// express.json only parses application/json bodies, so it does not interfere
+// with text/event-stream responses. Mount the SSE router before the JSON
+// parser to keep the streaming path as lightweight as possible.
+app.use('/api/markets', createMarketStreamRouter());
 
 app.use(express.json());
 

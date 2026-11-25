@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { StrKey } from "@stellar/stellar-sdk";
@@ -58,6 +58,50 @@ const WALLETS: WalletOption[] = [
 
 const STORAGE_KEY = "soroban-explorer:wallet-provider";
 
+type ProfileTab = "history" | "bonds";
+
+type BondStatus = "escrowed" | "returned" | "slashed";
+
+interface BondPosition {
+  id: string;
+  marketTitle: string;
+  role: "submitter" | "challenger";
+  amount: number;
+  status: BondStatus;
+  txHash: string;
+}
+
+const BOND_STATUS_META: Record<BondStatus, { label: string; color: string; background: string }> = {
+  escrowed: { label: "Escrowed", color: "#8a6d00", background: "rgba(255, 196, 0, 0.15)" },
+  returned: { label: "Returned with reward", color: "#1a7f37", background: "rgba(46, 160, 67, 0.15)" },
+  slashed: { label: "Slashed", color: "#c62828", background: "rgba(229, 72, 77, 0.15)" },
+};
+
+function normalizeBondStatus(status: unknown): BondStatus {
+  const s = String(status ?? "").toLowerCase();
+  if (s.includes("slash")) return "slashed";
+  if (s.includes("return") || s.includes("reward") || s.includes("claim")) return "returned";
+  return "escrowed";
+}
+
+function normalizeBonds(raw: unknown): BondPosition[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as any)?.bonds)
+    ? (raw as any).bonds
+    : Array.isArray((raw as any)?.data)
+    ? (raw as any).data
+    : [];
+  return list.map((b: any, i: number) => ({
+    id: String(b.id ?? b.bond_id ?? b.bondId ?? `${b.tx_hash ?? b.txHash ?? i}-${i}`),
+    marketTitle: String(b.market_title ?? b.marketTitle ?? b.market ?? b.title ?? "Unknown market"),
+    role: String(b.role ?? "").toLowerCase().includes("challeng") ? "challenger" : "submitter",
+    amount: Number(b.amount ?? b.bond_amount ?? b.bondAmount ?? 0),
+    status: normalizeBondStatus(b.status ?? b.state),
+    txHash: String(b.tx_hash ?? b.txHash ?? b.transaction_hash ?? ""),
+  }));
+}
+
 function getInjectedProvider(id: WalletId): any | null {
   const w = window as any;
   switch (id) {
@@ -81,6 +125,7 @@ export default function WalletPage() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState(address);
   const [page, setPage] = useState(1);
+  const [tab, setTab] = useState<ProfileTab>("history");
 
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [activeWallet, setActiveWallet] = useState<WalletId | null>(null);
@@ -150,6 +195,20 @@ export default function WalletPage() {
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 25;
 
+  const {
+    data: bondsData,
+    isLoading: bondsLoading,
+    isError: bondsError,
+  } = useQuery({
+    queryKey: ["wallet-bonds", address],
+    queryFn: () => api.getBonds(address),
+    enabled: !!address && isValidAddress && tab === "bonds",
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
+  });
+
+  const bonds = useMemo(() => normalizeBonds(bondsData), [bondsData]);
+
   const { pendingBets } = useBets();
   const optimisticBets = useMemo(
     () =>
@@ -198,10 +257,94 @@ export default function WalletPage() {
       </div>
 
       <div className="card">
+        <div role="tablist" aria-label="Profile sections" style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "history"}
+            onClick={() => setTab("history")}
+            style={{ fontWeight: tab === "history" ? 700 : 400 }}
+          >
+            History
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "bonds"}
+            onClick={() => setTab("bonds")}
+            style={{ fontWeight: tab === "bonds" ? 700 : 400 }}
+          >
+            Oracle Bonds
+          </button>
+        </div>
+
         {!address
           ? <p style={{ color: "var(--muted)" }}>Enter a Stellar address to view wallet history.</p>
           : !isValidAddress
           ? <p style={{ color: "var(--muted)" }}>Invalid Stellar address.</p>
+          : tab === "bonds"
+          ? <>
+              {bondsLoading
+                ? <Skeleton />
+                : bondsError
+                ? <p style={{ color: "var(--muted)" }}>Failed to load oracle bonds.</p>
+                : bonds.length === 0
+                ? <p style={{ color: "var(--muted)" }}>No oracle bonds found for this address.</p>
+                : <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ textAlign: "left", borderBottom: "1px solid var(--border)" }}>
+                          <th style={{ padding: "8px 10px" }}>Market</th>
+                          <th style={{ padding: "8px 10px" }}>Role</th>
+                          <th style={{ padding: "8px 10px" }}>Bond (XLM)</th>
+                          <th style={{ padding: "8px 10px" }}>Status</th>
+                          <th style={{ padding: "8px 10px" }}>Transaction</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bonds.map((bond) => {
+                          const meta = BOND_STATUS_META[bond.status];
+                          return (
+                            <tr key={bond.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                              <td style={{ padding: "8px 10px" }}>{bond.marketTitle}</td>
+                              <td style={{ padding: "8px 10px", textTransform: "capitalize" }}>{bond.role}</td>
+                              <td style={{ padding: "8px 10px", fontFamily: "monospace" }}>{bond.amount.toLocaleString()}</td>
+                              <td style={{ padding: "8px 10px" }}>
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    padding: "2px 8px",
+                                    borderRadius: 999,
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    color: meta.color,
+                                    background: meta.background,
+                                  }}
+                                >
+                                  {meta.label}
+                                </span>
+                              </td>
+                              <td style={{ padding: "8px 10px" }}>
+                                {bond.txHash ? (
+                                  <a
+                                    href={`https://stellar.expert/explorer/testnet/tx/${bond.txHash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ fontFamily: "monospace", fontSize: 12 }}
+                                  >
+                                    {bond.txHash.slice(0, 8)}…{bond.txHash.slice(-6)}
+                                  </a>
+                                ) : (
+                                  <span style={{ color: "var(--muted)" }}>—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>}
+            </>
           : <>
               {optimisticBets.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
@@ -221,7 +364,7 @@ export default function WalletPage() {
       </div>
 
       {/* Pagination */}
-      {isValidAddress && (
+      {isValidAddress && tab === "history" && (
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
           <span style={{ padding: "6px 10px", color: "var(--muted)" }}>Page {page}</span>

@@ -507,6 +507,62 @@ export function createApp() {
     })
   );
 
+  // GET /api/v1/markets/:id/stream — Server-Sent Events endpoint for live odds/pool/bet updates (issue #1173)
+  v1Router.get("/markets/:id/stream", (req, res) => {
+    const marketId = String(req.params.id).trim();
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const matchesMarket = (payload) => {
+      if (!payload || typeof payload !== "object") {
+        return false;
+      }
+      const candidate =
+        payload.market_id ?? payload.marketId ?? payload.contractId ?? payload.contract_id;
+      return candidate === undefined || candidate === null || String(candidate) === marketId;
+    };
+
+    const writeFrame = (eventName, payload) => {
+      res.write(`event: ${eventName}\n`);
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    writeFrame("connected", { type: "connected", market_id: marketId, timestamp: Date.now() });
+
+    const onMarketUpdate = (update) => {
+      if (!matchesMarket(update)) {
+        return;
+      }
+      writeFrame("market_update", update);
+    };
+
+    const onBetPlaced = (payload) => {
+      if (!matchesMarket(payload)) {
+        return;
+      }
+      writeFrame("bet_placed", payload);
+    };
+
+    const heartbeatTimer = setInterval(() => {
+      res.write(": keepalive\n\n");
+    }, 15000);
+
+    eventEmitter.on("market_update", onMarketUpdate);
+    eventEmitter.on("bet_placed", onBetPlaced);
+    eventEmitter.on(BET_PLACED_CHANNEL, onBetPlaced);
+
+    res.on("close", () => {
+      clearInterval(heartbeatTimer);
+      eventEmitter.off("market_update", onMarketUpdate);
+      eventEmitter.off("bet_placed", onBetPlaced);
+      eventEmitter.off(BET_PLACED_CHANNEL, onBetPlaced);
+    });
+  });
+
   // GET /api/v1/events/stream — Server-Sent Events endpoint for live event feed
   v1Router.get("/events/stream", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
@@ -537,15 +593,40 @@ export function createApp() {
     res.flushHeaders?.();
 
     const targetContract = req.query.contract ? String(req.query.contract).trim() : null;
+    const targetMarket = req.query.market_id ? String(req.query.market_id).trim() : null;
+
+    const matchesFilter = (payload) => {
+      if (!payload || typeof payload !== "object") {
+        return false;
+      }
+      if (targetContract && payload.contractId && payload.contractId !== targetContract) {
+        return false;
+      }
+      if (targetMarket) {
+        const candidate =
+          payload.market_id ?? payload.marketId ?? payload.contractId ?? payload.contract_id;
+        if (candidate !== undefined && candidate !== null && String(candidate) !== targetMarket) {
+          return false;
+        }
+      }
+      return true;
+    };
 
     // Send initial connection ack
     res.write(`data: ${JSON.stringify({ type: "connected", timestamp: Date.now() })}\n\n`);
 
     const onMarketUpdate = (update) => {
-      if (targetContract && update.contractId && update.contractId !== targetContract) {
+      if (!matchesFilter(update)) {
         return;
       }
       res.write(`data: ${JSON.stringify(update)}\n\n`);
+    };
+
+    const onBetPlaced = (payload) => {
+      if (!matchesFilter(payload)) {
+        return;
+      }
+      res.write(`event: bet_placed\ndata: ${JSON.stringify(payload)}\n\n`);
     };
 
     // Heartbeat to keep connection alive without pushing redundant static market data
@@ -554,10 +635,14 @@ export function createApp() {
     }, 15000);
 
     eventEmitter.on("market_update", onMarketUpdate);
+    eventEmitter.on("bet_placed", onBetPlaced);
+    eventEmitter.on(BET_PLACED_CHANNEL, onBetPlaced);
 
     res.on("close", () => {
       clearInterval(heartbeatTimer);
       eventEmitter.off("market_update", onMarketUpdate);
+      eventEmitter.off("bet_placed", onBetPlaced);
+      eventEmitter.off(BET_PLACED_CHANNEL, onBetPlaced);
     });
   });
   // GET /api/events/:seq/raw — raw un-decoded topics and data for a single event.
