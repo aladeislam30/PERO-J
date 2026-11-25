@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`f01b630`](../../commit/f01b630e57b251def8ef443d327fff65e1c3a077))
+
 - Auto-update CHANGELOG.md [skip ci] ([`a39bf18`](../../commit/a39bf1857f99d34148945cb457da807cce9f19c1))
 
 - Auto-update CHANGELOG.md [skip ci] ([`04d8459`](../../commit/04d845997ff4962a6f16757465b6d209587f5e38))
@@ -1537,6 +1539,14 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Implement Redis cache invalidation triggered by BetPlaced events ([`099f131`](../../commit/099f131528151da20f4db249315ae581ba9311a0))
+
+Subscribe MarketCacheManager to Redis pub/sub channel stellar:events:mkt:bet.
+  On receiving a BetPlaced event, immediately purge the stale cache keys
+  market:\ and market:\:odds, then pre-warm the cache
+  with updated totals and odds included in the event payload.
+
 
 - Add council window expiry escape hatch with full bond refund ([`948d4aa`](../../commit/948d4aa2eb34add46fe164060de26ab3ce8294df))
 
