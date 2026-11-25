@@ -1070,6 +1070,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`8a1ca16`](../../commit/8a1ca1674f63774e8f4fe68d850b02a2ac52443d))
+
 - Auto-update CHANGELOG.md [skip ci] ([`929b861`](../../commit/929b861dc02b95d098c4d7a240e499a7e9fbc75b))
 
 - Auto-update CHANGELOG.md [skip ci] ([`e575b5c`](../../commit/e575b5c878e864b6ac88d2a32185a29455d77562))
@@ -1568,6 +1570,8 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- [#1171](../../issues/1171) add Finalize Market action when challenge window expires ([`c9e94a7`](../../commit/c9e94a74e51702371edbfb862313644cefb1ff7b))
 
 - [#1172](../../issues/1172) add user profile bond escrow tracking section (escrowed, returned, slashed) ([`544a652`](../../commit/544a6523ad20f2b05c28c70be54af2f8081f5e1d))
 
