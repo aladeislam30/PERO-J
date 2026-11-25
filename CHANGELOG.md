@@ -1058,6 +1058,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`f984ca4`](../../commit/f984ca4c0fa390f36af92e70621f2911b707c697))
+
 - Auto-update CHANGELOG.md [skip ci] ([`6d38d2d`](../../commit/6d38d2d426f791559f39147b8b074605940b1c47))
 
 - Auto-update CHANGELOG.md [skip ci] ([`fe99aae`](../../commit/fe99aae594ab7e748415988da3641bb971567eea))
@@ -2127,6 +2129,11 @@ Closes [#988](../../issues/988)
 
 
 ### Testing
+
+- Cover migration rollback/idempotency ([`407ce84`](../../commit/407ce844094bf26185e9eb3b16460234f17ef898))
+
+Add PostgreSQL integration coverage for migration rollback, replay, and schema objects.
+
 
 - Assert delegated token descriptions ([`cedb970`](../../commit/cedb9704377eb6d7c3f5d04def9f9e89736912d7))
 
