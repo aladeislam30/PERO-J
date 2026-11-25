@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`04d8459`](../../commit/04d845997ff4962a6f16757465b6d209587f5e38))
+
 - Auto-update CHANGELOG.md [skip ci] ([`da29fcf`](../../commit/da29fcf0f077be7686998aafe67636a65f1bbd96))
 
 - Auto-update CHANGELOG.md [skip ci] ([`e8f131e`](../../commit/e8f131ec7b8c6578efbaef9932a41084d1e0a502))
@@ -1533,6 +1535,13 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Add council window expiry escape hatch with full bond refund ([`948d4aa`](../../commit/948d4aa2eb34add46fe164060de26ab3ce8294df))
+
+Add permissionless `expire_council_dispute` in `contracts/market/src/lib.rs` executable strictly after `council_deadline` to cancel a stalled disputed market and refund any escrowed dispute bond.
+
+  Closes [#1094](../../issues/1094), Closes [#1093](../../issues/1093)
+
 
 - Add Finalize Market button after uncontested challenge window ([`e4817d0`](../../commit/e4817d0d4837058093b3dfe9b6ce2a61258e1f8f))
 
@@ -2255,6 +2264,8 @@ Closes [#3](../../issues/3) — Parse ScVal Types to Native JavaScript Types
 
 ### Performance
 
+- Paginate market bettor queries ([`7845253`](../../commit/7845253eef0994772817d3c9123a54c728df99b8))
+
 - Add mv_leaderboard_ranks materialized view and refresh ([#1164](../../issues/1164)) ([`fee4ec7`](../../commit/fee4ec7958a1dff4cdc500acf1130554184ae2e2))
 
 - Configure connection pool sizing, idle timeouts, and connection recycling ([#989](../../issues/989)) ([`0a5a368`](../../commit/0a5a36859d6446ff8abc9de0dcfe839144096173))
@@ -2268,6 +2279,8 @@ Closes [#988](../../issues/988)
 
 
 ### Refactoring
+
+- Configure oracle bond parameters ([`e53a56d`](../../commit/e53a56d79981152494f5bcc1f248ece5492078a3))
 
 - Add reusable BaseDataProviderClient with rate-limiting and retries ([`4c9413a`](../../commit/4c9413af2b8bb2212ba87c308d74b1bee2ac6123))
 
