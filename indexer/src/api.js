@@ -1,5 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { createHash } from "node:crypto";
 import { StrKey } from "@stellar/stellar-sdk";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
@@ -12,6 +13,61 @@ import { MAX_TITLE_LEN, MAX_DESCRIPTION_LEN } from "./sanitize.js";
 import { parseSortParams } from "./query-validation.js";
 
 const PORT = process.env.PORT || 3001;
+
+// ---------------------------------------------------------------------------
+// ETag helpers (issue #1143)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute a weak ETag for a market object based on its last-modified
+ * timestamp and bet count.  Weak ETags (`W/"…"`) signal that two
+ * representations are semantically equivalent even if not byte-for-byte
+ * identical, which is the right choice for JSON API payloads where field
+ * order or whitespace may vary between serialisations.
+ *
+ * The tag is derived from:
+ *   SHA-256( updated_at || ":" || bet_count )[0..15]
+ *
+ * Both fields come from the database row, so the tag changes automatically
+ * whenever a new bet is recorded or the market is otherwise updated.
+ *
+ * @param {object} market - A market row as returned by db.getMarket().
+ * @param {string|Date|null} [market.updated_at]
+ * @param {number|string|null} [market.bet_count]
+ * @returns {string|null} Weak ETag value, e.g. `W/"a3f8c1d204e76b90"`.
+ */
+export function computeWeakETag(market) {
+  if (!market || typeof market !== "object") return null;
+  const updatedAt = market.updated_at ? String(market.updated_at) : "0";
+  const betCount = market.bet_count != null ? String(market.bet_count) : "0";
+  const hash = createHash("sha256")
+    .update(`${updatedAt}:${betCount}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `W/"${hash}"`;
+}
+
+/**
+ * Compute a weak ETag for a collection of markets (list endpoint).
+ * Uses the most-recently-updated market's timestamp combined with the
+ * total count of items so the tag changes on any addition or modification.
+ *
+ * @param {object[]} markets
+ * @returns {string|null}
+ */
+export function computeListETag(markets) {
+  if (!Array.isArray(markets) || markets.length === 0) return null;
+  const latestUpdatedAt = markets.reduce((latest, m) => {
+    const t = m.updated_at ? new Date(m.updated_at).getTime() : 0;
+    return t > latest ? t : latest;
+  }, 0);
+  const count = markets.length;
+  const hash = createHash("sha256")
+    .update(`${latestUpdatedAt}:${count}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `W/"${hash}"`;
+}
 
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -404,6 +460,7 @@ export function createApp() {
   );
 
   // GET /api/v1/markets?limit=&cursor=&page= — prediction markets cursor pagination (issue #966)
+  // Sets ETag + Cache-Control for HTTP caching (issue #1143)
   v1Router.get(
     "/markets",
     asyncHandler(async (req, res) => {
@@ -415,11 +472,27 @@ export function createApp() {
       const cursor = req.query.cursor || null;
       const page = Number(req.query.page) || 1;
       const result = await db.getMarkets({ limit, cursor, page });
+
+      // Compute a list-level ETag from the returned market rows.
+      const items = result.markets ?? result.items ?? [];
+      const etag = computeListETag(items);
+
+      res.setHeader("Cache-Control", "public, max-age=5, stale-while-revalidate=15");
+
+      if (etag) {
+        res.setHeader("ETag", etag);
+        const ifNoneMatch = req.headers["if-none-match"];
+        if (ifNoneMatch && ifNoneMatch === etag) {
+          return res.status(304).end();
+        }
+      }
+
       res.json(result);
     })
   );
 
   // GET /api/v1/markets/:id — market details with Redis caching (issue #968)
+  // Adds ETag + If-None-Match + Cache-Control for HTTP caching (issue #1143)
   v1Router.get(
     "/markets/:id",
     asyncHandler(async (req, res) => {
@@ -429,6 +502,18 @@ export function createApp() {
       if (!market) {
         return res.status(404).json({ error: "Market not found" });
       }
+
+      const etag = computeWeakETag(market);
+      res.setHeader("Cache-Control", "public, max-age=5, stale-while-revalidate=15");
+
+      if (etag) {
+        res.setHeader("ETag", etag);
+        const ifNoneMatch = req.headers["if-none-match"];
+        if (ifNoneMatch && ifNoneMatch === etag) {
+          return res.status(304).end();
+        }
+      }
+
       res.json(market);
     })
   );
