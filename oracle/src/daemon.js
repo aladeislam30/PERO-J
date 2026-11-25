@@ -9,9 +9,12 @@ import {
   getBondAuditConfig,
   startBondEscrowAudit,
 } from "./workers/bond-escrow-audit.ts";
+import { challengeWindowSeconds } from "./challenge-window.js";
+import { finalizeUncontestedMarkets } from "./workers/auto-finalizer.js";
 import { submitExpiredMarket } from "./workers/auto-submitter.js";
 
 const POLL_MS = Number(process.env.ORACLE_POLL_MS) || 15_000;
+const FINALIZE_POLL_MS = Number(process.env.ORACLE_FINALIZE_POLL_MS) || 60_000;
 const HEARTBEAT_MS = Number(process.env.ORACLE_HEARTBEAT_MS) || 60_000;
 const HEALTH_PORT = Number(process.env.ORACLE_HEALTH_PORT) || 9101;
 
@@ -27,6 +30,9 @@ export const metrics = {
   pollErrors: 0,
   marketsSubmitted: 0,
   resolutionHalts: 0,
+  lastFinalizeAt: null,
+  marketsFinalized: 0,
+  finalizeErrors: 0,
 };
 
 /**
@@ -39,7 +45,7 @@ export async function pollOnce(
   canResolve = async () => true,
 ) {
   const { rows } = await db.query(
-    "SELECT id, category, params FROM markets WHERE ends_at <= NOW() AND status = 'open' ORDER BY ends_at",
+    "SELECT id, slug, category, params FROM markets WHERE ends_at <= NOW() AND status = 'open' ORDER BY ends_at",
   );
   for (const market of rows) {
     if (!(await canResolve())) {
@@ -47,17 +53,35 @@ export async function pollOnce(
       console.error("[oracle] automated resolution halted by bond escrow audit");
       break;
     }
-    if (await submit(db, market, { canResolve })) {
-      metrics.marketsSubmitted++;
+    try {
+      if (await submit(db, market, { canResolve })) {
+        metrics.marketsSubmitted++;
+      }
+    } catch (err) {
+      metrics.pollErrors++;
+      console.error(`[oracle] market ${market.id} failed: ${err.message}`);
     }
   }
   metrics.polls++;
   metrics.lastPollAt = Date.now();
 }
 
+/** Finalize uncontested submissions whose challenge window has closed. */
+export async function finalizeOnce(
+  db = pool,
+  finalizeAll = finalizeUncontestedMarkets,
+) {
+  const { finalized, failed } = await finalizeAll(db);
+  metrics.marketsFinalized += finalized;
+  metrics.finalizeErrors += failed;
+  metrics.lastFinalizeAt = Date.now();
+}
+
 async function run() {
+  challengeWindowSeconds(); // Refuse to start on an invalid window.
   let stopping = false;
   let timer;
+  let finalizeTimer;
 
   const councilConfig = getCouncilInactivityConfig();
   const stopCouncilMonitor = councilConfig
@@ -96,6 +120,19 @@ async function run() {
     }
   };
 
+  // Separate loop so slow data providers cannot delay finalization.
+  const finalizeLoop = async () => {
+    try {
+      await finalizeOnce();
+    } catch (err) {
+      metrics.finalizeErrors++;
+      console.error("[oracle] finalize poll failed:", err.message);
+    }
+    if (!stopping) {
+      finalizeTimer = setTimeout(finalizeLoop, FINALIZE_POLL_MS);
+    }
+  };
+
   const heartbeat = setInterval(
     () =>
       console.log(
@@ -127,6 +164,7 @@ async function run() {
     stopping = true;
     console.log(`[oracle] ${signal} received, shutting down`);
     clearTimeout(timer);
+    clearTimeout(finalizeTimer);
     clearInterval(heartbeat);
     stopCouncilMonitor?.();
     stopBondAudit?.();
@@ -137,7 +175,7 @@ async function run() {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
 
-  await loop();
+  await Promise.all([loop(), finalizeLoop()]);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

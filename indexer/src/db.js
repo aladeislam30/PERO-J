@@ -287,6 +287,28 @@ const migrations = [
         alerted    BOOLEAN NOT NULL DEFAULT FALSE,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+  },
+  {
+    id: 16,
+    name: "add_oracle_daemon_market_columns",
+    sql: `
+      ALTER TABLE markets
+        ADD COLUMN IF NOT EXISTS slug     TEXT,
+        ADD COLUMN IF NOT EXISTS category TEXT,
+        ADD COLUMN IF NOT EXISTS params   JSONB NOT NULL DEFAULT '{}'::jsonb,
+        ADD COLUMN IF NOT EXISTS ends_at  TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS status   TEXT NOT NULL DEFAULT 'open';
+      CREATE INDEX IF NOT EXISTS idx_markets_status_ends_at ON markets(status, ends_at);
+    `,
+  },
+  {
+    id: 17,
+    name: "add_markets_challenge_deadline",
+    sql: `
+      ALTER TABLE markets ADD COLUMN IF NOT EXISTS challenge_deadline TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_markets_challenge_deadline
+        ON markets(challenge_deadline) WHERE status IN ('submitted', 'finalizing');
+
     `,
   },
 ];
