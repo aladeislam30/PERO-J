@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`5037c75`](../../commit/5037c7518a264b184e26164a6f92b45953fc2abc))
+
 - Auto-update CHANGELOG.md [skip ci] ([`a64c187`](../../commit/a64c1875ec8c82ef348d316e0fe39afdd8a557c0))
 
 - Auto-update CHANGELOG.md [skip ci] ([`f01b630`](../../commit/f01b630e57b251def8ef443d327fff65e1c3a077))
@@ -1541,6 +1543,14 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Generate OpenAPI spec for all registered endpoints ([#1150](../../issues/1150)) ([`e2547b5`](../../commit/e2547b5ea7cbe9f4e590fd9526e742547d8f5e49))
+
+- Add Prometheus histograms and optional auth for /metrics ([#1152](../../issues/1152)) ([`782b563`](../../commit/782b5638634efcac43fcab1f61548c730506ff62))
+
+- Propagate X-Request-ID through HTTP, DB queries and logs ([#1151](../../issues/1151)) ([`6408f0f`](../../commit/6408f0fe8e6853b9c11bf9628f04d70e7fffc93f))
+
+- Enforce granular per-route rate limits ([#1149](../../issues/1149)) ([`0ba3b2c`](../../commit/0ba3b2cc6fe0493f390c41890b53d51caca44168))
 
 - Implement Redis cache invalidation triggered by BetPlaced events ([`099f131`](../../commit/099f131528151da20f4db249315ae581ba9311a0))
 
