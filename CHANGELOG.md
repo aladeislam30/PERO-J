@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Audit accessibility (a11y) landmarks, ARIA labels, and keyboard navigation ([`caae887`](../../commit/caae887e40c7c8ede4770bdd998f181b7d13434e))
+
 - [#1211](../../issues/1211) test: develop end-to-end integration test covering complete l ([`fc2230d`](../../commit/fc2230d0d120303016e887d9d8db47521c43723d))
 
 Closes [#1211](../../issues/1211)
@@ -1059,6 +1061,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`56b48cd`](../../commit/56b48cd01ac3b641f45afe292750f74a30077988))
 
 - Auto-update CHANGELOG.md [skip ci] ([`9c0f51e`](../../commit/9c0f51e537081658137e9d2b37cb57ae38d42da3))
 
