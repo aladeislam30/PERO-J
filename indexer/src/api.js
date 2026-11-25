@@ -11,6 +11,19 @@ import { eventEmitter } from "./events.js";
 import { getRedis } from "./redis.js";
 import { MAX_TITLE_LEN, MAX_DESCRIPTION_LEN } from "./sanitize.js";
 import { parseSortParams } from "./query-validation.js";
+import { marketCacheManager } from "./cache-manager.js";
+import { BET_PLACED_CHANNEL } from "./cache-manager.js";
+import { publish } from "./redis.js";
+import { bondEscrowWorker } from "./bond-escrow-worker.js";
+import { renderMetrics } from "./metrics.js";
+import { securityHeaders } from "./middleware/securityHeaders.js";
+import { createCorsMiddleware } from "./middleware/cors.js";
+import { registerOracleRoutes } from "./oracle.js";
+import {
+  verifyAndConsumeOracleAttestation,
+  OracleVerificationError,
+} from "./oracle.js";
+
 
 const PORT = process.env.PORT || 3001;
 
@@ -57,6 +70,7 @@ export function computeWeakETag(market) {
  */
 export function computeListETag(markets) {
   if (!Array.isArray(markets) || markets.length === 0) return null;
+  // Pick the latest updated_at across all items.
   const latestUpdatedAt = markets.reduce((latest, m) => {
     const t = m.updated_at ? new Date(m.updated_at).getTime() : 0;
     return t > latest ? t : latest;
