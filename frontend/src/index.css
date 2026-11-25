@@ -38,6 +38,16 @@
   --bg:            var(--bg-primary);
   --text:          var(--text-primary);
   --muted:         var(--text-secondary);
+  /* Additional aliases for theme compatibility */
+  --accent-color:    var(--accent);
+  --surface-primary: var(--surface);
+  --text-muted:      var(--text-secondary);
+  --accent-contrast: var(--text-on-accent);
+  --success-color:   var(--green);
+  --warning-color:   var(--yellow);
+  --success-bg:      var(--green-bg);
+  --warning-bg:      var(--yellow-bg);
+
 
   color-scheme: light;
 }
@@ -73,6 +83,16 @@
     --bg:            var(--bg-primary);
     --text:          var(--text-primary);
     --muted:         var(--text-secondary);
+  /* Additional aliases for theme compatibility */
+  --accent-color:    var(--accent);
+  --surface-primary: var(--surface);
+  --text-muted:      var(--text-secondary);
+  --accent-contrast: var(--text-on-accent);
+  --success-color:   var(--green);
+  --warning-color:   var(--yellow);
+  --success-bg:      var(--green-bg);
+  --warning-bg:      var(--yellow-bg);
+
 
     color-scheme: dark;
   }
@@ -108,6 +128,16 @@
   --bg:            var(--bg-primary);
   --text:          var(--text-primary);
   --muted:         var(--text-secondary);
+  /* Additional aliases for theme compatibility */
+  --accent-color:    var(--accent);
+  --surface-primary: var(--surface);
+  --text-muted:      var(--text-secondary);
+  --accent-contrast: var(--text-on-accent);
+  --success-color:   var(--green);
+  --warning-color:   var(--yellow);
+  --success-bg:      var(--green-bg);
+  --warning-bg:      var(--yellow-bg);
+
 
   color-scheme: dark;
 }
@@ -119,6 +149,16 @@ body { background: var(--bg); color: var(--text); font-family: system-ui, sans-s
   --bg:            var(--bg-primary);
   --text:          var(--text-primary);
   --muted:         var(--text-secondary);
+  /* Additional aliases for theme compatibility */
+  --accent-color:    var(--accent);
+  --surface-primary: var(--surface);
+  --text-muted:      var(--text-secondary);
+  --accent-contrast: var(--text-on-accent);
+  --success-color:   var(--green);
+  --warning-color:   var(--yellow);
+  --success-bg:      var(--green-bg);
+  --warning-bg:      var(--yellow-bg);
+
 
   color-scheme: light;
 }
@@ -728,4 +768,9 @@ button:disabled {
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
+}
+
+input[type="radio"], input[type="checkbox"], input[type="range"] { width: auto; }
+@media (prefers-reduced-motion: reduce) {
+  body, a, input, select, button, .card, .badge { transition: none; }
 }

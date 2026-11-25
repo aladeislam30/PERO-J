@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+
 import NetworkStatusChip from "./NetworkStatusChip";
 
 /**
@@ -66,6 +67,7 @@ const WALLETS: WalletOption[] = [
 
 const WALLET_STORAGE_KEY = "stellar.wallet.provider";
 
+
 export default function Nav() {
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -83,6 +85,7 @@ export default function Nav() {
   });
   const [walletError, setWalletError] = useState<string | null>(null);
   const nav = useNavigate();
+  const { resolvedTheme, toggleTheme } = useTheme();
 
   // Apply theme on mount and whenever it changes
   useEffect(() => {
@@ -158,130 +161,3 @@ export default function Nav() {
   });
 
   return (
-    <header className="nav-header">
-      <div className="nav-bar">
-        <NavLink
-          to="/"
-          onClick={() => setMenuOpen(false)}
-          aria-label="Soroban Explorer home"
-          style={({ isActive }) => ({
-            fontWeight: 700,
-            fontSize: 16,
-            whiteSpace: "nowrap",
-            color: isActive ? "var(--accent)" : "inherit",
-            borderBottom: isActive ? "2px solid var(--accent)" : "none",
-            paddingBottom: isActive ? "4px" : "0px",
-          })}
-        >
-          <span aria-hidden="true">⬡</span> Soroban Explorer
-        </NavLink>
-        <button
-          type="button"
-          className="nav-toggle"
-          aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
-          aria-expanded={menuOpen}
-          aria-controls="primary-navigation"
-          onClick={() => setMenuOpen((o) => !o)}
-        >
-          <span aria-hidden="true">☰</span>
-        </button>
-        <nav id="primary-navigation" aria-label="Primary" className={`nav-links${menuOpen ? " open" : ""}`}>
-          <NavLink to="/contracts" onClick={() => setMenuOpen(false)} style={({ isActive }) => linkStyle(isActive)}>
-            Contracts
-          </NavLink>
-          <form onSubmit={search} className="nav-search" role="search">
-            <label htmlFor="nav-search-input" className="sr-only">
-              Search contract ID or wallet address
-            </label>
-            <input
-              id="nav-search-input"
-              value={q}
-              onChange={e => setQ(e.target.value)}
-              placeholder="Search contract ID or wallet address…"
-              style={{ flex: 1, minWidth: 0 }}
-            />
-            <button type="submit">Search</button>
-          </form>
-          <NetworkStatusChip sseUrl="/api/events/stream" />
-          <button type="button" onClick={toggleTheme} aria-label="Toggle dark mode" className="nav-theme">
-            {theme === "dark" ? "Light" : "Dark"}
-          </button>
-        </nav>
-      </div>
-      {walletModalOpen && (
-        <div
-          className="wallet-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Select a Stellar wallet"
-          onClick={() => setWalletModalOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            className="wallet-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: "var(--bg, #fff)",
-              color: "inherit",
-              borderRadius: 12,
-              padding: 20,
-              width: "min(420px, 92vw)",
-              maxHeight: "85vh",
-              overflowY: "auto",
-              boxShadow: "0 10px 40px rgba(0,0,0,0.3)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: 18 }}>Connect a Stellar wallet</h3>
-              <button type="button" aria-label="Close wallet selection" onClick={() => setWalletModalOpen(false)}>
-                ✕
-              </button>
-            </div>
-            {walletError && (
-              <p role="alert" style={{ color: "#d33", fontSize: 13, marginTop: 0 }}>
-                {walletError}
-              </p>
-            )}
-            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
-              {WALLETS.map((w) => (
-                <li key={w.id}>
-                  <button
-                    type="button"
-                    onClick={() => connectWallet(w.id)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      display: "flex",
-                      gap: 12,
-                      alignItems: "flex-start",
-                      padding: 12,
-                      borderRadius: 8,
-                      border: "1px solid var(--border, #ddd)",
-                      background: "transparent",
-                      color: "inherit",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span aria-hidden="true" style={{ fontSize: 22 }}>{w.icon}</span>
-                    <span>
-                      <strong style={{ display: "block", fontSize: 15 }}>{w.name}</strong>
-                      <span style={{ fontSize: 12, opacity: 0.75 }}>{w.guide}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-    </header>
-  );
-}
