@@ -87,7 +87,7 @@ async function insertEvent(queryable, ev) {
 function escapeLikePattern(value) {
   return String(value ?? "")
     .replace(/\\/g, "\\\\")
-    .replace(/[\[%_]/g, "\\$&");
+    .replace(/[[%_]/g, "\\$&");
 }
 
 /**

@@ -63,11 +63,45 @@ export default function Nav() {
   });
 
   return (
+<<<<<<< HEAD
     <>
       <header className="nav-header">
         <div className="nav-bar">
           <NavLink to="/" style={{ fontWeight: 700, fontSize: 18, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}>
             ⬡ Soroban Explorer
+=======
+    <header className="nav-header">
+      <div className="nav-bar">
+        <NavLink
+          to="/"
+          onClick={() => setMenuOpen(false)}
+          style={({ isActive }) => ({
+            fontWeight: 700,
+            fontSize: 16,
+            whiteSpace: "nowrap",
+            color: isActive ? "var(--accent)" : "inherit",
+            borderBottom: isActive ? "2px solid var(--accent)" : "none",
+            paddingBottom: isActive ? "4px" : "0px",
+          })}
+        >
+          ⬡ Soroban Explorer
+        </NavLink>
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-label="Toggle navigation menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((o) => !o)}
+        >
+          ☰
+        </button>
+        <nav className={`nav-links${menuOpen ? " open" : ""}`}>
+          <NavLink to="/profile" onClick={() => setMenuOpen(false)} style={({ isActive }) => linkStyle(isActive)}>
+            Profile
+          </NavLink>
+          <NavLink to="/contracts" onClick={() => setMenuOpen(false)} style={({ isActive }) => linkStyle(isActive)}>
+            Contracts
+>>>>>>> pr-1228
           </NavLink>
           <button
             type="button"

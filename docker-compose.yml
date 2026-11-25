@@ -108,6 +108,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       RPC_URL: ${RPC_URL:-http://soroban:8000/soroban/rpc}
       NETWORK_PASSPHRASE: ${NETWORK_PASSPHRASE:-Standalone Network ; February 2017}
+
       EXPLORER_CONTRACT_ID: ${EXPLORER_CONTRACT_ID:-}
       ORACLE_CONTRACT_ID: ${ORACLE_CONTRACT_ID:-}
       ORACLE_COUNCIL_ROSTER: ${ORACLE_COUNCIL_ROSTER:-}

@@ -49,6 +49,7 @@
   --warning-bg:      var(--yellow-bg);
 
 
+
   color-scheme: light;
 }
 
@@ -95,6 +96,7 @@
 
 
     color-scheme: dark;
+
   }
 }
 
@@ -137,6 +139,7 @@
   --warning-color:   var(--yellow);
   --success-bg:      var(--green-bg);
   --warning-bg:      var(--yellow-bg);
+
 
 
   color-scheme: dark;
@@ -580,6 +583,7 @@ button:disabled {
 
 /* Single-column layout under 640px */
 @media (max-width: 639px) {
+
 
   body { font-size: 13px; }
 
