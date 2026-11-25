@@ -14,6 +14,18 @@ pub enum Error {
     ContractPaused = 4,
     InvalidAmount = 5,
     InvalidState = 6,
+    CouncilWindowActive = 7,
+}
+
+/// Default council dispute resolution window in seconds (72 hours).
+pub const COUNCIL_WINDOW_SECS: u64 = 72 * 60 * 60;
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DisputeRecord {
+    pub challenger: Address,
+    pub bond: i128,
+    pub council_deadline: u64,
 }
 
 /// Single-field market state replacing the separate
@@ -57,6 +69,7 @@ pub enum DataKey {
     Market,
     LegacyMarket,
     HasBet(Address),
+    Dispute,
 }
 
 #[contract]
@@ -203,6 +216,46 @@ impl MarketContract {
         }
         m.status = MarketStatus::Disputed;
         env.storage().persistent().set(&DataKey::Market, &m);
+        let council_deadline = env.ledger().timestamp() + COUNCIL_WINDOW_SECS;
+        env.storage().persistent().set(
+            &DataKey::Dispute,
+            &DisputeRecord { challenger, bond: 0, council_deadline },
+        );
+    }
+
+    /// Permissionless escape hatch executable strictly after `council_deadline`.
+    /// Cancels the stalled disputed market and refunds any escrowed bond in full.
+    pub fn expire_council_dispute(env: Env) -> MarketStatus {
+        require_not_paused(&env);
+        let mut m = load_market(&env);
+        if m.status != MarketStatus::Disputed {
+            panic_with_error!(&env, Error::InvalidState);
+        }
+        let dispute: DisputeRecord = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Dispute)
+            .unwrap_or_else(|| panic_with_error!(&env, Error::InvalidState));
+        if env.ledger().timestamp() <= dispute.council_deadline {
+            panic_with_error!(&env, Error::CouncilWindowActive);
+        }
+        if dispute.bond > 0 {
+            let token: Address = env.storage().instance().get(&DataKey::Token).unwrap();
+            env.invoke_contract::<()>(
+                &token,
+                &Symbol::new(&env, "transfer"),
+                vec![
+                    &env,
+                    env.current_contract_address().to_val(),
+                    dispute.challenger.to_val(),
+                    dispute.bond.into_val(&env),
+                ],
+            );
+        }
+        env.storage().persistent().remove(&DataKey::Dispute);
+        m.status = MarketStatus::Cancelled;
+        env.storage().persistent().set(&DataKey::Market, &m);
+        m.status
     }
 
     pub fn get_market(env: Env) -> Market {
@@ -213,7 +266,7 @@ impl MarketContract {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::testutils::{Address as _, Ledger as _};
 
     fn setup() -> (Env, MarketContractClient<'static>, Address) {
         let env = Env::default();
@@ -256,4 +309,27 @@ mod tests {
         c.migrate(&admin);
         assert_eq!(c.get_market().no_pool, 2);
     }
+
+    #[test]
+    fn council_window_expiry_escape_hatch_executes_strictly_after_deadline() {
+        let (env, c, admin) = setup();
+        env.ledger().set_timestamp(1_000);
+        c.submit_outcome(&admin, &true);
+        let challenger = Address::generate(&env);
+        c.challenge_outcome(&challenger);
+        assert_eq!(c.get_market().status, MarketStatus::Disputed);
+
+        // Strictly before or at council_deadline must fail with CouncilWindowActive.
+        env.ledger().set_timestamp(1_000 + COUNCIL_WINDOW_SECS);
+        assert_eq!(
+            c.try_expire_council_dispute(),
+            Err(Ok(soroban_sdk::Error::from_contract_error(Error::CouncilWindowActive as u32)))
+        );
+
+        // Strictly after council_deadline succeeds permissionlessly.
+        env.ledger().set_timestamp(1_000 + COUNCIL_WINDOW_SECS + 1);
+        assert_eq!(c.expire_council_dispute(), MarketStatus::Cancelled);
+        assert_eq!(c.get_market().status, MarketStatus::Cancelled);
+    }
 }
+
