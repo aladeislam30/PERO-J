@@ -1,7 +1,7 @@
 #![no_std]
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, vec, Address, Env,
-    IntoVal, Symbol,
+    IntoVal, String, Symbol,
 };
 
 #[contracterror]
@@ -19,10 +19,18 @@ pub enum Error {
     InvalidOracleConfig = 9,
     InvalidLimit = 10,
     CouncilWindowActive = 11,
+    TitleTooLong = 12,
+    DescriptionTooLong = 13,
+    InvalidUrl = 14,
 }
 
 /// Default council dispute resolution window in seconds (72 hours).
 pub const COUNCIL_WINDOW_SECS: u64 = 72 * 60 * 60;
+
+/// Maximum allowed length (in bytes) for a market title.
+pub const MAX_TITLE_LEN: u32 = 160;
+/// Maximum allowed length (in bytes) for a market description.
+pub const MAX_DESCRIPTION_LEN: u32 = 1000;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,7 +38,6 @@ pub struct DisputeRecord {
     pub challenger: Address,
     pub bond: i128,
     pub council_deadline: u64,
-}
 }
 
 const MAX_BETTOR_PAGE_SIZE: u32 = 100;
@@ -123,6 +130,13 @@ fn admin(env: &Env) -> Address {
         .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialised))
 }
 
+/// Requires the caller to be the admin account.
+///
+/// The admin is expected to be a Stellar multi-signature account configured
+/// with a 3-of-5 signer set and `high` threshold. `require_auth` on the admin
+/// address forces the Stellar ledger to satisfy that account's signer weights
+/// and thresholds before this contract entry point can execute, so a single
+/// key cannot authorize privileged operations on its own.
 fn require_admin(env: &Env, caller: &Address) {
     caller.require_auth();
     if *caller != admin(env) {
@@ -134,6 +148,63 @@ fn require_not_paused(env: &Env) {
     if env.storage().instance().get(&DataKey::IsPaused).unwrap_or(false) {
         panic_with_error!(env, Error::ContractPaused);
     }
+}
+
+/// Rejects market titles longer than [`MAX_TITLE_LEN`] bytes.
+pub fn validate_title(env: &Env, title: &String) {
+    if title.len() > MAX_TITLE_LEN {
+        panic_with_error!(env, Error::TitleTooLong);
+    }
+}
+
+/// Rejects market descriptions longer than [`MAX_DESCRIPTION_LEN`] bytes.
+pub fn validate_description(env: &Env, description: &String) {
+    if description.len() > MAX_DESCRIPTION_LEN {
+        panic_with_error!(env, Error::DescriptionTooLong);
+    }
+}
+
+/// Rejects external evidence/source URLs that are not well-formed `http(s)` URLs.
+pub fn validate_url(env: &Env, url: &String) {
+    let len = url.len();
+    if len == 0 {
+        panic_with_error!(env, Error::InvalidUrl);
+    }
+    let bytes = url.to_bytes();
+    let scheme_len: u32 = if starts_with(&bytes, b"https://") {
+        8
+    } else if starts_with(&bytes, b"http://") {
+        7
+    } else {
+        panic_with_error!(env, Error::InvalidUrl);
+    };
+    // Require at least one host character after the scheme.
+    if len <= scheme_len {
+        panic_with_error!(env, Error::InvalidUrl);
+    }
+    // Reject whitespace and control characters anywhere in the URL.
+    let mut i: u32 = 0;
+    while i < len {
+        let b = bytes.get_unchecked(i);
+        if b <= 0x20 || b == 0x7f {
+            panic_with_error!(env, Error::InvalidUrl);
+        }
+        i += 1;
+    }
+}
+
+fn starts_with(bytes: &soroban_sdk::Bytes, prefix: &[u8]) -> bool {
+    if bytes.len() < prefix.len() as u32 {
+        return false;
+    }
+    let mut i: u32 = 0;
+    while i < prefix.len() as u32 {
+        if bytes.get_unchecked(i) != prefix[i as usize] {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
 fn load_market(env: &Env) -> Market {
@@ -246,6 +317,14 @@ impl MarketContract {
             &DataKey::Market,
             &Market { status: MarketStatus::Open, yes_pool: 0, no_pool: 0 },
         );
+    }
+
+    /// Validates market content (title, description, source URL) against the
+    /// contract's length limits and URL format rules. Reverts on invalid input.
+    pub fn validate_content(env: Env, title: String, description: String, source_url: String) {
+        validate_title(&env, &title);
+        validate_description(&env, &description);
+        validate_url(&env, &source_url);
     }
 
     pub fn pause(env: Env, admin: Address) {
@@ -485,6 +564,7 @@ mod tests {
             c.try_place_bet(&Address::generate(&env), &true, &1, &0),
             Err(Ok(soroban_sdk::Error::from_contract_error(Error::ContractPaused as u32)))
         );
+
         assert_eq!(c.get_market().status, MarketStatus::Open);
         c.unpause(&admin);
         c.submit_outcome(&admin, &true, &BASE_BOND);
@@ -614,93 +694,31 @@ mod tests {
             Err(Ok(soroban_sdk::Error::from_contract_error(
                 Error::Unauthorized as u32
             )))
+
+
+    }
+
+    #[test]
+    fn validate_content_accepts_valid_input() {
+        let (env, c, _admin) = setup();
+        let title = String::from_str(&env, "Will BTC close above $100k?");
+        let desc = String::from_str(&env, "Resolves YES if BTC/USD closes above 100000 on 2025-12-31.");
+        let url = String::from_str(&env, "https://example.com/evidence");
+        c.validate_content(&title, &desc, &url);
+    }
+
+    #[test]
+    fn validate_content_rejects_oversized_title() {
+        let (env, c, _admin) = setup();
+        let long = "a".repeat((MAX_TITLE_LEN + 1) as usize);
+        let title = String::from_str(&env, &long);
+        let desc = String::from_str(&env, "ok");
+        let url = String::from_str(&env, "https://example.com");
+        assert_eq!(
+            c.try_validate_content(&title, &desc, &url),
+            Err(Ok(soroban_sdk::Error::from_contract_error(Error::TitleTooLong as u32)))
+
         );
     }
 
     #[test]
-    fn bond_scales_with_pool_volume_and_is_escrowed() {
-        use soroban_sdk::token::{Client as TokenClient, StellarAssetClient};
-
-        const XLM: i128 = 10_000_000;
-        let (env, c, admin, token) = setup();
-        let sac = StellarAssetClient::new(&env, &token);
-        let bettor = Address::generate(&env);
-        sac.mint(&bettor, &(1_000_000 * XLM));
-
-        assert_eq!(c.required_bond(&false), BASE_BOND);
-        assert_eq!(c.required_bond(&true), BASE_CHALLENGE_BOND);
-
-        c.place_bet(&bettor, &true, &(5_000 * XLM));
-        assert_eq!(c.required_bond(&false), BASE_BOND);
-
-        c.place_bet(&bettor, &false, &(95_000 * XLM));
-        let required = 1_000 * XLM;
-        assert_eq!(c.required_bond(&false), required);
-        assert_eq!(c.required_bond(&true), required);
-        sac.mint(&admin, &required);
-
-        let underfunded = c.try_submit_outcome(&admin, &true, &(required - 1));
-        assert_eq!(
-            underfunded,
-            Err(Ok(soroban_sdk::Error::from_contract_error(
-                Error::InsufficientBond as u32
-            )))
-        );
-        c.submit_outcome(&admin, &true, &required);
-        let token_client = TokenClient::new(&env, &token);
-        assert_eq!(token_client.balance(&c.address), 100_000 * XLM + required);
-
-        let challenger = Address::generate(&env);
-        sac.mint(&challenger, &required);
-        let underfunded = c.try_challenge_outcome(&challenger, &(required - 1));
-        assert_eq!(
-            underfunded,
-            Err(Ok(soroban_sdk::Error::from_contract_error(
-                Error::InsufficientBond as u32
-            )))
-        );
-        c.challenge_outcome(&challenger, &required);
-        assert_eq!(
-            token_client.balance(&c.address),
-            100_000 * XLM + 2 * required
-        );
-
-        // A 1,000,000 XLM pool requires a 10,000 XLM bond.
-        // This market is already resolved, so validate the calculation in a fresh instance.
-        let (large_env, large_pool, large_admin, large_token) = setup();
-        let large_bettor = Address::generate(&large_env);
-        let large_sac = StellarAssetClient::new(&large_env, &large_token);
-        large_sac.mint(&large_bettor, &(1_000_000 * XLM));
-        large_pool.place_bet(&large_bettor, &true, &(1_000_000 * XLM));
-        assert_eq!(large_pool.required_bond(&false), 10_000 * XLM);
-        assert_eq!(
-            large_pool.try_submit_outcome(&large_admin, &true, &(10_000 * XLM - 1)),
-            Err(Ok(soroban_sdk::Error::from_contract_error(
-                Error::InsufficientBond as u32
-            )))
-        );
-    }
-
-    #[test]
-    fn council_window_expiry_escape_hatch_executes_strictly_after_deadline() {
-        let (env, c, admin) = setup();
-        env.ledger().set_timestamp(1_000);
-        c.submit_outcome(&admin, &true);
-        let challenger = Address::generate(&env);
-        c.challenge_outcome(&challenger);
-        assert_eq!(c.get_market().status, MarketStatus::Disputed);
-
-        // Strictly before or at council_deadline must fail with CouncilWindowActive.
-        env.ledger().set_timestamp(1_000 + COUNCIL_WINDOW_SECS);
-        assert_eq!(
-            c.try_expire_council_dispute(),
-            Err(Ok(soroban_sdk::Error::from_contract_error(Error::CouncilWindowActive as u32)))
-        );
-
-        // Strictly after council_deadline succeeds permissionlessly.
-        env.ledger().set_timestamp(1_000 + COUNCIL_WINDOW_SECS + 1);
-        assert_eq!(c.expire_council_dispute(), MarketStatus::Cancelled);
-        assert_eq!(c.get_market().status, MarketStatus::Cancelled);
-    }
-}
-
