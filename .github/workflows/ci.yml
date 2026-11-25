@@ -38,6 +38,8 @@ jobs:
 
       - name: Run contract tests
         run: cargo test
+      - name: Run cargo audit
+        run: cargo install --locked cargo-audit && cargo audit
 
   frontend:
     name: Frontend tests
@@ -59,6 +61,8 @@ jobs:
         run: npm run lint
       - name: Run tests
         run: npm test -- --run
+      - name: Run npm audit
+        run: npm audit --audit-level=high
       - name: Build
         run: npm run build
 
@@ -108,6 +112,8 @@ jobs:
         run: npm run typecheck
       - name: Run DB migrations
         run: npm run migrate
+      - name: Run npm audit
+        run: npm audit --audit-level=high
       - name: Run tests
         run: npm test
 
@@ -157,6 +163,8 @@ jobs:
         run: npm run typecheck
       - name: Run DB migrations
         run: npm run migrate
+      - name: Run npm audit
+        run: npm audit --audit-level=high
       - name: Run tests
         run: npm test
 
@@ -178,6 +186,8 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Run npm audit
+        run: npm audit --audit-level=high
       - name: Run tests
         run: npm test
 

@@ -1,0 +1,24 @@
+name: Migration Lint
+
+on:
+  pull_request:
+    paths:
+      - "indexer/migrations/**"
+      - "scripts/lint-migrations.js"
+      - "scripts/lint-migrations.test.js"
+      - "scripts/__fixtures__/**"
+      - ".github/workflows/migration-lint.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Linter self-test
+        run: node scripts/lint-migrations.test.js
+      - name: Lint migrations
+        run: node scripts/lint-migrations.js indexer/migrations

@@ -13,6 +13,7 @@ This document provides a centralized registry mapping operational Prometheus ale
 | **`LeaderboardDrift`** | `indexer` / `db` | `High` | [LEADERBOARD_REBUILD_RUNBOOK.md](LEADERBOARD_REBUILD_RUNBOOK.md) | `curl -s http://localhost:3001/api/leaderboard/status` | [`scripts/remediation/rebuild_leaderboard.sh`](../scripts/remediation/rebuild_leaderboard.sh) |
 | **`RPCHighErrorRate`** | `rpc-adapter` | `High` | [ORACLE_ADAPTER_FRESHNESS.md](ORACLE_ADAPTER_FRESHNESS.md) | `curl -s -X POST $RPC_URL -d '{"method":"getHealth"}'` | [`scripts/remediation/switch_rpc_provider.sh`](../scripts/remediation/switch_rpc_provider.sh) |
 | **`CouncilVoteStalled`** | `governance` | `High` | [COUNCIL_RUNBOOK.md](COUNCIL_RUNBOOK.md) | `curl -s http://localhost:3001/api/disputes?status=escalated` | N/A (Governance Quorum Notification) |
+| **`BackupFailed`** / `PITRRestoreTestFailed` | `db` / `backup` | `Critical` | [backup.md](backup.md) | `./scripts/backup-restore-test.sh` | [`scripts/backup.sh`](../scripts/backup.sh) |
 
 ---
 
@@ -30,6 +31,8 @@ This document provides a centralized registry mapping operational Prometheus ale
            ├─► IndexerStalled    ──► Check lag & logs ──► Run restart_indexer.sh
            ├─► MarketStuck       ──► Inspect oracle   ──► Run resolve_stuck_market.sh
            ├─► LeaderboardDrift  ──► Check drift SQL  ──► Run rebuild_leaderboard.sh
+           ├─► BackupFailed      ──► Check WAL archive ──► Run backup.sh
+           ├─► PITRRestoreTestFailed ──► Inspect restore logs ──► Run backup-restore-test.sh
            └─► RPCHighErrorRate  ──► Test RPC latency ──► Run switch_rpc_provider.sh
            │
            ▼
@@ -74,6 +77,27 @@ This document provides a centralized registry mapping operational Prometheus ale
   ```bash
   # Failover to backup Soroban RPC provider
   ./scripts/remediation/switch_rpc_provider.sh https://soroban-rpc.backup.provider.com
+  ```
+
+### BackupFailed / PITRRestoreTestFailed
+- **Trigger**: `backup_last_success_timestamp_seconds` older than 24h, or `pitr_restore_test_success == 0` after a scheduled restore test.
+- **Runbook**: [backup.md](backup.md)
+- **Targets**: RPO ≤ 24h (daily base backup) with continuous WAL archiving for point-in-time recovery; RTO ≤ 2h for full restore on staging.
+- **Remediation**:
+  ```bash
+  # Trigger an on-demand encrypted base backup + WAL archive to S3
+  ./scripts/backup.sh
+
+  # Validate restoration of the latest backup into a scratch database (PITR test)
+  ./scripts/backup-restore-test.sh
+  ```
+- **Verification**:
+  ```bash
+  # Confirm the latest backup object exists and is encrypted in the remote bucket
+  aws s3 ls "$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX" --recursive | tail -n 5
+
+  # Confirm restore test exit status and reported RTO
+  ./scripts/backup-restore-test.sh --verify-only
   ```
 
 ---

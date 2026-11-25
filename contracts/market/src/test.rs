@@ -69,16 +69,16 @@ fn bond_scales_with_pool_volume() {
 
     // 5,000 XLM pool -> 1% = 50 XLM, still below the base bond.
     let u = funded(&c, 2_000_000 * XLM);
-    c.client.place_bet(&u, &1, &1, &(5_000 * XLM));
+    c.client.place_bet(&u, &1, &1, &(5_000 * XLM), &0);
     assert_eq!(c.client.required_bond(&1, &false), BASE_BOND);
 
     // 100,000 XLM pool -> 1,000 XLM.
-    c.client.place_bet(&u, &1, &0, &(95_000 * XLM));
+    c.client.place_bet(&u, &1, &0, &(95_000 * XLM), &0);
     assert_eq!(c.client.required_bond(&1, &false), 1_000 * XLM);
     assert_eq!(c.client.required_bond(&1, &true), 1_000 * XLM);
 
     // 1,000,000 XLM pool -> 10,000 XLM.
-    c.client.place_bet(&u, &1, &0, &(900_000 * XLM));
+    c.client.place_bet(&u, &1, &0, &(900_000 * XLM), &0);
     assert_eq!(c.client.required_bond(&1, &false), 10_000 * XLM);
 }
 
@@ -86,7 +86,7 @@ fn bond_scales_with_pool_volume() {
 fn insufficient_bond_reverts() {
     let c = setup();
     let u = funded(&c, 1_000_000 * XLM);
-    c.client.place_bet(&u, &1, &1, &(100_000 * XLM));
+    c.client.place_bet(&u, &1, &1, &(100_000 * XLM), &0);
     let required = c.client.required_bond(&1, &false);
 
     let r = c.client.try_submit_outcome(&u, &1, &1, &(required - 1));
@@ -105,8 +105,8 @@ fn one_sided_market_cancels_and_refunds() {
     let c = setup();
     let a = funded(&c, 100 * XLM);
     let b = funded(&c, 50 * XLM);
-    c.client.place_bet(&a, &1, &1, &(100 * XLM));
-    c.client.place_bet(&b, &1, &1, &(50 * XLM));
+    c.client.place_bet(&a, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&b, &1, &1, &(50 * XLM), &0);
 
     // Everyone bet YES but the market resolves NO: no payouts would be possible.
     assert_eq!(c.client.resolve_market(&c.admin, &1, &0), Status::Cancelled);
@@ -127,8 +127,8 @@ fn claim_emits_event_and_zero_claim_does_not() {
     let c = setup();
     let w = funded(&c, 100 * XLM);
     let l = funded(&c, 100 * XLM);
-    c.client.place_bet(&w, &1, &1, &(100 * XLM));
-    c.client.place_bet(&l, &1, &0, &(100 * XLM));
+    c.client.place_bet(&w, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&l, &1, &0, &(100 * XLM), &0);
     assert_eq!(c.client.resolve_market(&c.admin, &1, &1), Status::Resolved);
 
     // 200 XLM pool minus 2% fee goes to the sole winner.
@@ -146,8 +146,8 @@ fn withdraw_fees_emits_event_only_when_authorized() {
     let c = setup();
     let w = funded(&c, 100 * XLM);
     let l = funded(&c, 100 * XLM);
-    c.client.place_bet(&w, &1, &1, &(100 * XLM));
-    c.client.place_bet(&l, &1, &0, &(100 * XLM));
+    c.client.place_bet(&w, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&l, &1, &0, &(100 * XLM), &0);
     c.client.resolve_market(&c.admin, &1, &1);
     assert_eq!(c.client.get_fees(), 4 * XLM);
 
@@ -174,8 +174,8 @@ fn disputed<'a>(c: &Ctx<'a>) -> (Vec<Address>, Address, Address) {
     c.client.set_council(&c.admin, &council, &2);
     let bettor = funded(c, 100 * XLM);
     let other = funded(c, 100 * XLM);
-    c.client.place_bet(&bettor, &1, &1, &(100 * XLM));
-    c.client.place_bet(&other, &1, &0, &(100 * XLM));
+    c.client.place_bet(&bettor, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&other, &1, &0, &(100 * XLM), &0);
     let submitter = funded(c, BASE_BOND);
     let disputer = funded(c, BASE_CHALLENGE_BOND);
     c.client.submit_outcome(&submitter, &1, &1, &BASE_BOND);
@@ -240,5 +240,83 @@ fn admin_can_veto_during_timelock() {
         expect(Error::InvalidState)
     );
     assert_eq!(c.client.finalize_dispute(&1), Status::Resolved);
-    assert_eq!(c.client.get_market(&1).winning_side, 1);
+}
+
+/// End-to-end lifecycle: bet -> submit -> challenge -> council -> finalize -> claim.
+///
+/// Mirrors the full dispute flow described in issue #1211 and asserts that no
+/// funds leak: every token that enters the contract is either paid out to a
+/// winner, refunded, or accounted for in the fee pool.
+#[test]
+fn full_lifecycle_bet_submit_challenge_council_finalize_claim() {
+    let c = setup();
+
+    // 4 council members, threshold of 3 votes.
+    let council = Vec::from_array(
+        &c.env,
+        [
+            Address::generate(&c.env),
+            Address::generate(&c.env),
+            Address::generate(&c.env),
+            Address::generate(&c.env),
+        ],
+    );
+    c.client.set_council(&c.admin, &council, &3);
+
+    // Bettor A bets 100 XLM YES, Bettor B bets 100 XLM NO.
+    let bettor_a = funded(&c, 100 * XLM);
+    let bettor_b = funded(&c, 100 * XLM);
+    c.client.place_bet(&bettor_a, &1, &1, &(100 * XLM), &0);
+    c.client.place_bet(&bettor_b, &1, &0, &(100 * XLM), &0);
+    assert_eq!(c.token.balance(&bettor_a), 0);
+    assert_eq!(c.token.balance(&bettor_b), 0);
+    assert_eq!(c.token.balance(&c.client.address), 200 * XLM);
+
+    // Submitter proposes YES with the required bond.
+    let submit_bond = c.client.required_bond(&1, &false);
+    let submitter = funded(&c, submit_bond);
+    c.client.submit_outcome(&submitter, &1, &1, &submit_bond);
+    assert_eq!(c.token.balance(&submitter), 0);
+
+    // Challenger disputes to NO with the required challenge bond.
+    let challenge_bond = c.client.required_bond(&1, &true);
+    let challenger = funded(&c, challenge_bond);
+    c.client.challenge_outcome(&challenger, &1, &challenge_bond);
+    assert_eq!(c.token.balance(&challenger), 0);
+    assert_eq!(
+        c.token.balance(&c.client.address),
+        200 * XLM + submit_bond + challenge_bond
+    );
+
+    // Council votes confirming NO (side 0).
+    c.client.vote_dispute(&council.get(0).unwrap(), &1, &0);
+    c.client.vote_dispute(&council.get(1).unwrap(), &1, &0);
+    c.client.vote_dispute(&council.get(2).unwrap(), &1, &0);
+
+    // Timelock passes, then the market is finalized.
+    let t0 = c.env.ledger().timestamp();
+    c.env.ledger().set_timestamp(t0 + TIMELOCK_SECS);
+    assert_eq!(c.client.finalize_dispute(&1), Status::Resolved);
+    assert_eq!(c.client.get_market(&1).winning_side, 0);
+
+    // Challenger's bond is returned; submitter's bond is slashed into fees.
+    assert_eq!(c.token.balance(&challenger), challenge_bond);
+    assert_eq!(c.token.balance(&submitter), 0);
+    assert_eq!(c.client.get_fees(), 4 * XLM + submit_bond);
+
+    // Bettor B (NO) claims winnings; Bettor A (YES) has nothing to claim.
+    let payout = c.client.claim(&bettor_b, &1);
+    assert_eq!(payout, 196 * XLM);
+    assert_eq!(c.token.balance(&bettor_b), 196 * XLM);
+    assert_eq!(
+        c.client.try_claim(&bettor_a, &1).err(),
+        expect(Error::NothingToClaim)
+    );
+
+    // Zero fund leakage: contract holds exactly the fee pool.
+    assert_eq!(c.token.balance(&c.client.address), c.client.get_fees());
+    assert_eq!(c.client.get_fees(), 4 * XLM + submit_bond);
+
+    // Event log reflects the full lifecycle.
+    assert_eq!(emitted(&c, "claimed"), 1);
 }

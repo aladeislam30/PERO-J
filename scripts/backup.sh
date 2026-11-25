@@ -16,14 +16,24 @@
 #                    (or use an IAM instance role / profile)
 #
 # WAL archiving (point-in-time recovery) note:
-#   Set archive_mode=on, archive_command in postgresql.conf, e.g.:
-#     archive_command = 'aws s3 cp %p s3://$BACKUP_S3_BUCKET/wal/%f'
-#   This base backup script complements WAL archiving; together they provide
-#   RPO as low as the WAL shipping interval (~5 min on a busy testnet node).
-#   See docs/backup.md for full PITR setup instructions.
+#   This script produces the daily base backup. Continuous WAL archiving is
+#   configured on the PostgreSQL server (postgresql.conf), e.g.:
+#     wal_level = replica
+#     archive_mode = on
+#     archive_command = 'aws s3 cp %p s3://$BACKUP_S3_BUCKET/wal/%f --sse aws:kms'
+#   Together, base backups + WAL archiving provide PITR with RPO as low as the
+#   WAL shipping interval (~5 min on a busy testnet node).
+#
+#   When BACKUP_S3_BUCKET is set, this script validates that archive_mode is
+#   enabled and that archive_command is configured, and (unless
+#   BACKUP_SKIP_WAL_UPLOAD=1) uploads any pending WAL segments from the local
+#   archive directory to the encrypted S3 bucket as a safety net.
+#   See docs/backup.md for the full PITR setup and recovery runbook.
 #
 # Cron (daily at 02:00 UTC):
 #   0 2 * * * cd /path/to/repo && ./scripts/backup.sh >> /var/log/pg-backup.log 2>&1
+#
+# Any failure exits non-zero so cron/schedulers can alert.
 #
 # Restore procedure: see docs/backup.md
 
@@ -34,6 +44,7 @@ RETENTION_DAYS="${RETENTION_DAYS:-7}"
 BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET:-}"
 BACKUP_S3_PREFIX="${BACKUP_S3_PREFIX:-postgres-backups}"
 BACKUP_S3_REGION="${BACKUP_S3_REGION:-us-east-1}"
+BACKUP_SKIP_WAL_UPLOAD="${BACKUP_SKIP_WAL_UPLOAD:-0}"
 MIN_DUMP_BYTES=512
 
 # Derive connection settings from DATABASE_URL when individual PG* vars are unset.
@@ -112,6 +123,58 @@ if [[ -n "$BACKUP_S3_BUCKET" ]]; then
   fi
 
   echo "[backup] S3 object verified"
+
+  # ── WAL archiving validation + safety-net upload ──────────────────────────
+  if [[ "$BACKUP_SKIP_WAL_UPLOAD" != "1" ]]; then
+    echo "[backup] validating WAL archiving configuration"
+
+    ARCHIVE_MODE="$(psql -tAc 'SHOW archive_mode' 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ -z "$ARCHIVE_MODE" ]]; then
+      echo "ERROR: could not query archive_mode; is psql available and the server reachable?" >&2
+      exit 1
+    fi
+    if [[ "$ARCHIVE_MODE" != "on" && "$ARCHIVE_MODE" != "always" ]]; then
+      echo "ERROR: archive_mode is '${ARCHIVE_MODE}', expected 'on' or 'always' for PITR" >&2
+      exit 1
+    fi
+
+    ARCHIVE_COMMAND="$(psql -tAc 'SHOW archive_command' 2>/dev/null | tr -d '\r' || true)"
+    if [[ -z "$ARCHIVE_COMMAND" || "$ARCHIVE_COMMAND" == "(disabled)" ]]; then
+      echo "ERROR: archive_command is not configured; PITR WAL archiving is disabled" >&2
+      exit 1
+    fi
+    echo "[backup] WAL archiving ok (archive_mode=${ARCHIVE_MODE})"
+
+    # Upload any pending WAL segments from the local archive directory.
+    WAL_ARCHIVE_DIR="$(psql -tAc 'SHOW archive_command' 2>/dev/null \
+      | sed -nE 's#.*%p.*#&#p' >/dev/null; psql -tAc 'SHOW data_directory' 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ -n "$WAL_ARCHIVE_DIR" && -d "${WAL_ARCHIVE_DIR}/pg_wal/archive_status" ]]; then
+      shopt -s nullglob
+      PENDING_WAL=("${WAL_ARCHIVE_DIR}/pg_wal/"*.ready)
+      shopt -u nullglob
+      if [[ "${#PENDING_WAL[@]}" -gt 0 ]]; then
+        echo "[backup] uploading ${#PENDING_WAL[@]} pending WAL segment(s) to s3://${BACKUP_S3_BUCKET}/wal/"
+        for ready in "${PENDING_WAL[@]}"; do
+          wal_seg="${ready%.ready}"
+          if ! aws s3 cp "$wal_seg" "s3://${BACKUP_S3_BUCKET}/wal/$(basename "$wal_seg")" \
+               --region "$BACKUP_S3_REGION" \
+               --sse aws:kms \
+               --storage-class STANDARD_IA \
+               --no-progress; then
+            echo "ERROR: WAL segment upload failed for ${wal_seg}" >&2
+            exit 1
+          fi
+        done
+        echo "[backup] pending WAL segments uploaded"
+      else
+        echo "[backup] no pending WAL segments to upload"
+      fi
+    else
+      echo "[backup] WAL archive directory not accessible locally; skipping safety-net upload"
+    fi
+  else
+    echo "[backup] BACKUP_SKIP_WAL_UPLOAD=1; skipping WAL validation/upload"
+  fi
 fi
 
 # ── Prune old local dumps ─────────────────────────────────────────────────────

@@ -25,6 +25,26 @@ jobs:
       - name: Make monitoring script executable
         run: chmod +x scripts/check-tls-expiry.sh
 
+      - name: Verify automated Let's Encrypt renewal (dry-run)
+        id: renewal
+        env:
+          # Optional: set CERTBOT_RENEW_CMD as a repository variable to override
+          # the renewal command (e.g. when certbot runs on a remote host via ssh).
+          CERTBOT_RENEW_CMD: ${{ vars.CERTBOT_RENEW_CMD }}
+        run: |
+          set -euo pipefail
+          RENEW_CMD="${CERTBOT_RENEW_CMD:-certbot renew --dry-run --non-interactive --agree-tos}"
+          echo "Running renewal verification: ${RENEW_CMD}"
+          if ! bash -c "${RENEW_CMD}"; then
+            echo "::error::Automated certificate renewal dry-run FAILED."
+            echo "::error::Renewal is not working; certificates will expire without intervention."
+            echo "::notice::To renew manually: run 'certbot renew' (or 'certbot certonly --webroot -w /var/www/html -d <domain>')"
+            echo "::notice::on the production host, then reload the web server (e.g. 'systemctl reload nginx')."
+            echo "::notice::Check certbot logs at /var/log/letsencrypt/letsencrypt.log for details."
+            exit 1
+          fi
+          echo "Renewal dry-run succeeded."
+
       - name: Check TLS certificate expiry
         env:
           # Resolve hosts: manual input → repository variable → empty (skipped gracefully)
@@ -40,12 +60,34 @@ jobs:
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
           # Optional: set NOTIFY_EMAIL as a repository secret for e-mail alerts.
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
-        run: ./scripts/check-tls-expiry.sh
+          # Emit Prometheus textfile metrics for scraping/alerting.
+          PROMETHEUS_MODE: 'true'
+          PROMETHEUS_OUTPUT: tls-cert-expiry.prom
+        run: |
+          set -euo pipefail
+          ./scripts/check-tls-expiry.sh
+          if [ -f tls-cert-expiry.prom ]; then
+            echo "----- Prometheus metrics -----"
+            cat tls-cert-expiry.prom
+            echo "------------------------------"
+          fi
+
+      - name: Upload Prometheus metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tls-cert-expiry-metrics
+          path: tls-cert-expiry.prom
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Notify on failure
         if: failure()
         run: |
-          echo "::error::One or more TLS certificates are expiring soon or have already expired."
-          echo "::error::Check the job log above for details and renew the affected certificates."
+          echo "::error::TLS monitoring failed: a certificate has <15 days remaining, has expired, or the automated renewal dry-run failed."
+          echo "::error::Check the job log above for details."
+          echo "::notice::To renew manually: run 'certbot renew' on the production host,"
+          echo "::notice::then reload the web server (e.g. 'systemctl reload nginx')."
           echo "::notice::Automated renewal: ensure certbot renew (or equivalent) is configured"
           echo "::notice::on the production host and runs at least twice a day via cron/systemd."
+          echo "::notice::Review certbot logs at /var/log/letsencrypt/letsencrypt.log if renewal fails."

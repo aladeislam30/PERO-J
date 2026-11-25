@@ -8,6 +8,50 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Sanitize query params and validate sort fields ([#1153](../../issues/1153)) ([`3892704`](../../commit/38927049dba2c3f58f349c7d151299073473a614))
+
+- Audit accessibility (a11y) landmarks, ARIA labels, and keyboard navigation ([`caae887`](../../commit/caae887e40c7c8ede4770bdd998f181b7d13434e))
+
+- [#1211](../../issues/1211) test: develop end-to-end integration test covering complete l ([`fc2230d`](../../commit/fc2230d0d120303016e887d9d8db47521c43723d))
+
+Closes [#1211](../../issues/1211)
+
+
+- [#1210](../../issues/1210) security: implement replay attack defenses on off-chain oracl ([`6198aa2`](../../commit/6198aa2bfbb5933a1c4a54cc6a2fb402e1eed4be))
+
+Closes [#1210](../../issues/1210)
+
+
+- [#1209](../../issues/1209) security: add slippage protection for user bets placed during ([`45ebe10`](../../commit/45ebe100f8642849b0d76297722d57b6077b6c5c))
+
+Closes [#1209](../../issues/1209)
+
+
+- [#1208](../../issues/1208) security: implement CORS and security headers policy (CSP, HS ([`d72bfdb`](../../commit/d72bfdbed60657306a6d6a2ec370c198f18cb9ad))
+
+Closes [#1208](../../issues/1208)
+
+
+- [#1199](../../issues/1199) feat(monitoring): configure alert rules for stuck markets (>4 ([`62549f7`](../../commit/62549f7a7db787441e97b899176644effb92f7ff))
+
+Closes [#1199](../../issues/1199)
+
+
+- [#1198](../../issues/1198) feat(monitoring): configure alert rules for indexer stall (la ([`fc09158`](../../commit/fc091584fb90d48fc14ba44c179a33e1f6d919c7))
+
+Closes [#1198](../../issues/1198)
+
+
+- [#1197](../../issues/1197) feat(monitoring): set up Prometheus scraping configuration an ([`8c8abd0`](../../commit/8c8abd031664e9044d0ee47dcddc8ed20cddfc55))
+
+Closes [#1197](../../issues/1197)
+
+
+- [#1196](../../issues/1196) infra: implement automated secret rotation runbook and script ([`91ff0b1`](../../commit/91ff0b16670ab1eb115b676fd293e8db40c4371f))
+
+Closes [#1196](../../issues/1196)
+
+
 - Add full jitter backoff to Soroban RPC retries ([`fea638f`](../../commit/fea638fd26eea96d91de73c8a386130c74b9554c))
 
 Closes [#938](../../issues/938)
@@ -1013,10 +1057,28 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### CI / CD
 
+- Add cargo audit, npm audit, and dependabot vulnerability scanning ([`fe9d9c1`](../../commit/fe9d9c1174ed4e5537080b803c28984782c24bff))
+
 - Fix frontend Node and lockfile ([`bbf0ec1`](../../commit/bbf0ec1ae4733eb5bde2275dbc0e60b3e50d558d))
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`a20f195`](../../commit/a20f1958e4705dbf0e54709d73cf44f05b7379c8))
+
+- Note that no duplicate 0008 migration prefix exists on main ([#1155](../../issues/1155)) ([`18f1928`](../../commit/18f1928f0ff87173c889a6904c3c7b6918b80b01))
+
+- Auto-update CHANGELOG.md [skip ci] ([`1805f6d`](../../commit/1805f6de5570c2d5034b90075d2cbfb8b0956e58))
+
+- Auto-update CHANGELOG.md [skip ci] ([`56b48cd`](../../commit/56b48cd01ac3b641f45afe292750f74a30077988))
+
+- Auto-update CHANGELOG.md [skip ci] ([`9c0f51e`](../../commit/9c0f51e537081658137e9d2b37cb57ae38d42da3))
+
+- Auto-update CHANGELOG.md [skip ci] ([`f984ca4`](../../commit/f984ca4c0fa390f36af92e70621f2911b707c697))
+
+- Auto-update CHANGELOG.md [skip ci] ([`6d38d2d`](../../commit/6d38d2d426f791559f39147b8b074605940b1c47))
+
+- Auto-update CHANGELOG.md [skip ci] ([`fe99aae`](../../commit/fe99aae594ab7e748415988da3641bb971567eea))
 
 - Auto-update CHANGELOG.md [skip ci] ([`cafb672`](../../commit/cafb6722df9a7b3f7776583399c10eba7bddadfc))
 
@@ -1448,6 +1510,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add migration linter and CI workflow ([#1156](../../issues/1156)) ([`41b61ba`](../../commit/41b61ba5bf50cca6d35e2f84b581e66acbc7eb08))
 
 - Zod event validation with DLQ and single-writer advisory lock ([`8f03bea`](../../commit/8f03beab87b4bf52c9ab763d79ce0704762583bd))
 
@@ -2084,6 +2148,13 @@ Closes [#988](../../issues/988)
 
 ### Testing
 
+- Add API integration tests for pagination, filtering and errors ([#1154](../../issues/1154)) ([`8720fe8`](../../commit/8720fe8c8924c091cb9e3ee544d8f2f0094da5e5))
+
+- Cover migration rollback/idempotency ([`407ce84`](../../commit/407ce844094bf26185e9eb3b16460234f17ef898))
+
+Add PostgreSQL integration coverage for migration rollback, replay, and schema objects.
+
+
 - Assert delegated token descriptions ([`cedb970`](../../commit/cedb9704377eb6d7c3f5d04def9f9e89736912d7))
 
 - Transfer sends amount in event data per SEP-41 ([`5d467db`](../../commit/5d467db96421d79e171922ec8155cdbdfd227e2a))
@@ -2174,6 +2245,8 @@ Add a tests/integration/ directory with stub tests that document the
 
 
 ### Simple
+
+- Batch fix 4 issues ([`b105bd0`](../../commit/b105bd0f4acb84011d9a34d5e4133e1bb4919b30))
 
 - Batch fix 2 issues ([`390edc7`](../../commit/390edc779477f721026317308d512239d695f4bc))
 

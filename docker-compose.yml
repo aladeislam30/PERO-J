@@ -48,10 +48,9 @@ services:
       timeout: 5s
       retries: 10
 
-  indexer:
-    build:
-      context: .
-      dockerfile: indexer/Dockerfile
+  # ── Soroban (stellar/quickstart local sandbox node) ────────────────────────
+  soroban:
+    image: stellar/quickstart:latest
     restart: unless-stopped
     command: ["--local", "--enable-soroban-rpc"]
     ports:
@@ -86,7 +85,6 @@ services:
       ORACLE_COUNCIL_QUORUM: ${ORACLE_COUNCIL_QUORUM:-}
       PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}
       API_ADMIN_KEY: ${API_ADMIN_KEY:-}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     command: ["npm", "run", "migrate"]
 
   # ── Indexer (backend API + poller, hot-reload) ─────────────────────────────
@@ -98,11 +96,24 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       soroban:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    environment: *indexer-env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://peroj:peroj@postgres:5432/peroj}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-20}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      RPC_URL: ${RPC_URL:-http://soroban:8000/soroban/rpc}
+      NETWORK_PASSPHRASE: ${NETWORK_PASSPHRASE:-Standalone Network ; February 2017}
+      EXPLORER_CONTRACT_ID: ${EXPLORER_CONTRACT_ID:-}
+      ORACLE_CONTRACT_ID: ${ORACLE_CONTRACT_ID:-}
+      ORACLE_COUNCIL_ROSTER: ${ORACLE_COUNCIL_ROSTER:-}
+      ORACLE_COUNCIL_QUORUM: ${ORACLE_COUNCIL_QUORUM:-}
+      PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}
+      API_ADMIN_KEY: ${API_ADMIN_KEY:-}
     ports:
       - "3001:3001"
     volumes:
@@ -136,7 +147,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      - indexer
+      indexer:
+        condition: service_started
     environment:
       # Vite proxies /api to the indexer via the compose network hostname.
       VITE_API_PROXY: ${VITE_API_PROXY:-http://indexer:3001}

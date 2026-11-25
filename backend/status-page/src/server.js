@@ -7,11 +7,42 @@ import { loadIncidents } from "./incidents.js";
 
 const PAGE_PATH = fileURLToPath(new URL("../public/index.html", import.meta.url));
 
+const DEFAULT_ALLOWED_ORIGINS = ["https://status.handsoff.io"];
+
+const SECURITY_HEADERS = {
+  "content-security-policy":
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+  "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+  "x-frame-options": "DENY",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "x-dns-prefetch-control": "off",
+};
+
+function resolveAllowedOrigins(cfg) {
+  const configured = cfg.allowedOrigins ?? process.env.STATUS_ALLOWED_ORIGINS;
+  if (Array.isArray(configured)) return configured.filter(Boolean);
+  if (typeof configured === "string") {
+    return configured.split(",").map((o) => o.trim()).filter(Boolean);
+  }
+  return DEFAULT_ALLOWED_ORIGINS;
+}
+
+function applySecurityHeaders(res, allowedOrigins, req) {
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    res.setHeader(name, value);
+  }
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("vary", "Origin");
+  }
+}
+
 function sendJson(res, status, body) {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
-    "access-control-allow-origin": "*",
   });
   res.end(JSON.stringify(body));
 }
@@ -27,10 +58,21 @@ function sendJson(res, status, body) {
  */
 export function createStatusServer(cfg = loadConfig(), { monitor, logger = console } = {}) {
   const statusMonitor = monitor ?? new StatusMonitor(cfg, { logger });
+  const allowedOrigins = resolveAllowedOrigins(cfg);
   let pageCache = null;
 
   const server = http.createServer(async (req, res) => {
     try {
+      applySecurityHeaders(res, allowedOrigins, req);
+
+      if (req.method === "OPTIONS") {
+        res.writeHead(204, {
+          "access-control-allow-methods": "GET, HEAD, OPTIONS",
+          "access-control-allow-headers": "content-type",
+          "access-control-max-age": "600",
+        });
+        return res.end();
+      }
       if (req.method !== "GET" && req.method !== "HEAD") {
         res.writeHead(405, { allow: "GET, HEAD" });
         return res.end();
