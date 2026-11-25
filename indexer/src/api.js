@@ -7,6 +7,7 @@ import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { registerMarketStream } from "./marketStream.js";
 import { formatOracleDisputes, oracleDisputes } from "./oracleDisputes.js";
 import { health } from "./index.js";
+
 import { eventEmitter } from "./events.js";
 import { getRedis } from "./redis.js";
 import { MAX_TITLE_LEN, MAX_DESCRIPTION_LEN } from "./sanitize.js";
@@ -27,6 +28,8 @@ import { routeRateLimit } from "./routeRateLimit.js";
 import { requestIdMiddleware } from "./requestContext.js";
 import { httpMetricsMiddleware } from "./middleware/httpMetrics.js";
 import { registerOpenApi } from "./openapi.js";
+
+import { renderReferralCard, renderReferralMeta, sanitizeReferralField } from "./referralCard.js";
 
 
 const PORT = process.env.PORT || 3001;
@@ -932,18 +935,3 @@ export function createApp() {
           code: err.code,
         });
       }
-      throw err;
-    }
-  });
-
-  app.post("/api/oracle/attestations", handleOracleAttestation);
-  app.post("/api/oracle/attestation", handleOracleAttestation);
-
-  return app;
-}
-
-export function startApi() {
-  return createApp().listen(PORT, () => {
-    console.log(`[api] listening on ${PORT}`);
-  });
-}

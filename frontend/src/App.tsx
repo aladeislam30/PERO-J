@@ -9,6 +9,7 @@ import WalletPage from "./pages/WalletPage";
 import EventPage from "./pages/EventPage";
 import BettingPage from "./pages/BettingPage";
 import SettingsPage from "./pages/SettingsPage";
+import ReferralsPage from "./pages/ReferralsPage";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/event/:seq" element={<EventPage />} />
             <Route path="/bet" element={<BettingPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/referrals" element={<ReferralsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
