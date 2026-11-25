@@ -1,124 +1,41 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-
+import { useWallet } from "../wallet/WalletProvider";
+import { WalletSelectorModal } from "../wallet/WalletSelectorModal";
 import NetworkStatusChip from "./NetworkStatusChip";
+import { useTheme } from "../theme";
 
-/**
- * Reads the stored or system theme preference.
- * Priority: localStorage → system prefers-color-scheme → "light"
- */
-function getInitialTheme(): "light" | "dark" {
-  if (typeof window === "undefined") return "light";
-  const stored = localStorage.getItem("theme") as "light" | "dark" | null;
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+function SunIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
 }
 
-/**
- * Applies the theme to the document root and persists to localStorage.
- */
-function applyTheme(theme: "light" | "dark") {
-  const root = document.documentElement;
-  root.setAttribute("data-theme", theme);
-  localStorage.setItem("theme", theme);
+function MoonIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
 }
-
-type WalletId = "freighter" | "xbull" | "albedo" | "lobstr" | "walletconnect";
-
-interface WalletOption {
-  id: WalletId;
-  name: string;
-  icon: string;
-  guide: string;
-}
-
-const WALLETS: WalletOption[] = [
-  {
-    id: "freighter",
-    name: "Freighter",
-    icon: "🚀",
-    guide: "Install the Freighter browser extension, then unlock it and approve the connection.",
-  },
-  {
-    id: "xbull",
-    name: "xBull",
-    icon: "🐂",
-    guide: "Install the xBull extension or mobile app, then approve the connection request.",
-  },
-  {
-    id: "albedo",
-    name: "Albedo",
-    icon: "🛡️",
-    guide: "Albedo is web-based — no install needed. Approve the connection in the popup.",
-  },
-  {
-    id: "lobstr",
-    name: "Lobstr",
-    icon: "🦞",
-    guide: "Use the Lobstr mobile app and scan the WalletConnect QR code to connect.",
-  },
-  {
-    id: "walletconnect",
-    name: "WalletConnect",
-    icon: "🔗",
-    guide: "Scan the WalletConnect QR code with any compatible Stellar wallet.",
-  },
-];
-
-const WALLET_STORAGE_KEY = "stellar.wallet.provider";
-
 
 export default function Nav() {
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [theme, setTheme] = useState(() => {
-    if (typeof window === "undefined") return "light";
-    const stored = localStorage.getItem("theme");
-    if (stored) return stored;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  });
   const [walletModalOpen, setWalletModalOpen] = useState(false);
-  const [wallet, setWallet] = useState<WalletId | null>(() => {
-    if (typeof window === "undefined") return null;
-    const stored = localStorage.getItem(WALLET_STORAGE_KEY);
-    return stored && WALLETS.some((w) => w.id === stored) ? (stored as WalletId) : null;
-  });
-  const [walletError, setWalletError] = useState<string | null>(null);
   const nav = useNavigate();
   const { resolvedTheme, toggleTheme } = useTheme();
-
-  // Apply theme on mount and whenever it changes
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
-
-  // Escape key handler for wallet modal
-  useEffect(() => {
-    if (!walletModalOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setWalletModalOpen(false);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [walletModalOpen]);
-
-  // Keep in sync with system preference changes (e.g. user changes OS theme)
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      // Only follow system if user hasn't overridden it
-      const stored = localStorage.getItem("theme");
-      if (!stored) {
-        setTheme(e.matches ? "dark" : "light");
-      }
-    };
-    mq.addEventListener("change", handleChange);
-    return () => mq.removeEventListener("change", handleChange);
-  }, []);
-
-  function toggleTheme() {
-    setTheme((t) => (t === "dark" ? "light" : "dark"));
-  }
+  const { address, providerName, status } = useWallet();
 
   function search(e: React.FormEvent) {
     e.preventDefault();
@@ -130,26 +47,11 @@ export default function Nav() {
     setMenuOpen(false);
   }
 
-  function connectWallet(id: WalletId) {
-    const option = WALLETS.find((w) => w.id === id);
-    if (!option) return;
-    setWalletError(null);
-    try {
-      localStorage.setItem(WALLET_STORAGE_KEY, id);
-      setWallet(id);
-      setWalletModalOpen(false);
-    } catch {
-      setWalletError(`Unable to connect to ${option.name}. Make sure the wallet is installed and try again.`);
-    }
-  }
-
-  function disconnectWallet() {
-    localStorage.removeItem(WALLET_STORAGE_KEY);
-    setWallet(null);
-    setWalletError(null);
-  }
-
-  const activeWallet = wallet ? WALLETS.find((w) => w.id === wallet) : null;
+  const walletLabel = address
+    ? `${address.slice(0, 6)}…${address.slice(-4)}`
+    : status === "connecting"
+      ? "Connecting…"
+      : "Connect wallet";
 
   const linkStyle = (isActive: boolean) => ({
     fontWeight: 600,
@@ -161,5 +63,77 @@ export default function Nav() {
   });
 
   return (
-
-
+    <>
+      <header className="nav-header">
+        <div className="nav-bar">
+          <NavLink to="/" style={{ fontWeight: 700, fontSize: 18, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            ⬡ Soroban Explorer
+          </NavLink>
+          <button
+            type="button"
+            className="nav-toggle"
+            aria-label="Toggle navigation menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+          <nav id="primary-navigation" aria-label="Primary" className={`nav-links${menuOpen ? " open" : ""}`}>
+            <NavLink to="/contracts" onClick={() => setMenuOpen(false)} style={({ isActive }) => linkStyle(isActive)}>
+              Contracts
+            </NavLink>
+            <NavLink to="/referrals" onClick={() => setMenuOpen(false)} style={({ isActive }) => linkStyle(isActive)}>
+              Referrals
+            </NavLink>
+            <NavLink to="/settings" onClick={() => setMenuOpen(false)} style={({ isActive }) => linkStyle(isActive)}>
+              Settings
+            </NavLink>
+            <form onSubmit={search} className="nav-search" role="search">
+              <label htmlFor="nav-search-input" className="sr-only">
+                Search contract ID or wallet address
+              </label>
+              <input
+                id="nav-search-input"
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="Search contract ID or wallet address…"
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <button type="submit">Search</button>
+            </form>
+            <NetworkStatusChip sseUrl="/api/events/stream" />
+            <button
+              type="button"
+              className="wallet-nav-button"
+              title={address && providerName ? `${providerName}: ${address}` : "Connect a Stellar wallet"}
+              aria-label={address && providerName ? `${providerName} wallet ${address}` : "Connect a Stellar wallet"}
+              onClick={() => setWalletModalOpen(true)}
+            >
+              {address ? "◉" : "＋"} {walletLabel}
+            </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
+              title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
+              style={{
+                background: "transparent",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-color)",
+                padding: "6px 8px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                lineHeight: 0,
+                borderRadius: 6,
+              }}
+            >
+              {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
+            </button>
+          </nav>
+        </div>
+      </header>
+      <WalletSelectorModal open={walletModalOpen} onClose={() => setWalletModalOpen(false)} />
+    </>
+  );
+}

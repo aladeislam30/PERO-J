@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { ToastProvider } from "./components/Toast";
 import { ThemeProvider } from "./theme";
+import { WalletProvider } from "./wallet/WalletProvider";
 import "./index.css";
 
 const qc = new QueryClient({
@@ -21,9 +22,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={qc}>
       <ThemeProvider>
         <BrowserRouter>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
+          <WalletProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </WalletProvider>
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>
