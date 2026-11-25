@@ -8,6 +8,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- [#1199](../../issues/1199) feat(monitoring): configure alert rules for stuck markets (>4 ([`62549f7`](../../commit/62549f7a7db787441e97b899176644effb92f7ff))
+
+Closes [#1199](../../issues/1199)
+
+
+- [#1198](../../issues/1198) feat(monitoring): configure alert rules for indexer stall (la ([`fc09158`](../../commit/fc091584fb90d48fc14ba44c179a33e1f6d919c7))
+
+Closes [#1198](../../issues/1198)
+
+
+- [#1197](../../issues/1197) feat(monitoring): set up Prometheus scraping configuration an ([`8c8abd0`](../../commit/8c8abd031664e9044d0ee47dcddc8ed20cddfc55))
+
+Closes [#1197](../../issues/1197)
+
+
+- [#1196](../../issues/1196) infra: implement automated secret rotation runbook and script ([`91ff0b1`](../../commit/91ff0b16670ab1eb115b676fd293e8db40c4371f))
+
+Closes [#1196](../../issues/1196)
+
+
 - Add full jitter backoff to Soroban RPC retries ([`fea638f`](../../commit/fea638fd26eea96d91de73c8a386130c74b9554c))
 
 Closes [#938](../../issues/938)
@@ -1017,6 +1037,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`fe99aae`](../../commit/fe99aae594ab7e748415988da3641bb971567eea))
 
 - Auto-update CHANGELOG.md [skip ci] ([`cafb672`](../../commit/cafb6722df9a7b3f7776583399c10eba7bddadfc))
 
