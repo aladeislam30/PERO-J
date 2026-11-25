@@ -255,6 +255,40 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_oracle_disputes_market ON oracle_disputes(market_id);
     `,
   },
+  {
+    id: 8,
+    name: "create_dispute_bonds_table",
+    sql: `
+      CREATE TABLE IF NOT EXISTS dispute_bonds (
+        id             TEXT PRIMARY KEY,
+        dispute_id     TEXT NOT NULL,
+        market_id      TEXT,
+        bond_type      TEXT NOT NULL,
+        depositor      TEXT NOT NULL,
+        amount         NUMERIC NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'deposited',
+        settled_amount NUMERIC DEFAULT 0,
+        created_at     TIMESTAMPTZ DEFAULT NOW(),
+        settled_at     TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_dispute_bonds_dispute ON dispute_bonds(dispute_id);
+      CREATE INDEX IF NOT EXISTS idx_dispute_bonds_status ON dispute_bonds(status);
+    `,
+  },
+  {
+    id: 15,
+    name: "create_circuit_breakers_table",
+    sql: `
+      CREATE TABLE IF NOT EXISTS circuit_breakers (
+        name       TEXT PRIMARY KEY,
+        tripped    BOOLEAN NOT NULL DEFAULT FALSE,
+        reason     TEXT,
+        details    JSONB,
+        alerted    BOOLEAN NOT NULL DEFAULT FALSE,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {
@@ -1217,6 +1251,83 @@ export const db = {
       ]
     );
     return rows[0].id;
+  },
+
+  /**
+   * Record a deposited dispute bond. Amounts are in stroops.
+   *
+   * @param {object} bond
+   * @param {string} bond.id
+   * @param {string} bond.dispute_id
+   * @param {string} [bond.market_id]
+   * @param {string} bond.bond_type - 'submitter' or 'challenger'
+   * @param {string} bond.depositor
+   * @param {number|string} bond.amount
+   * @returns {Promise<any>}
+   */
+  async recordDisputeBond({ id, dispute_id, market_id = null, bond_type, depositor, amount }) {
+    const { rows } = await pool.query(
+      `INSERT INTO dispute_bonds (id, dispute_id, market_id, bond_type, depositor, amount)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [id, dispute_id, market_id, bond_type, depositor, amount]
+    );
+    return rows[0];
+  },
+
+  /**
+   * Settle a dispute bond (returned or slashed).
+   *
+   * @param {object} params
+   * @param {string} params.id
+   * @param {string} [params.status='settled'] - 'returned', 'slashed', or 'settled'
+   * @param {number|string} params.settled_amount - Stroops that left escrow
+   * @returns {Promise<any|null>}
+   */
+  async settleDisputeBond({ id, status = "settled", settled_amount }) {
+    const { rows } = await pool.query(
+      `UPDATE dispute_bonds
+       SET status = $2, settled_amount = $3, settled_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id, status, settled_amount]
+    );
+    return rows[0] ?? null;
+  },
+
+  /**
+   * List dispute bonds, newest first.
+   *
+   * @param {object} [filters]
+   * @param {string} [filters.dispute_id]
+   * @param {string} [filters.status]
+   * @returns {Promise<any[]>}
+   */
+  async getDisputeBonds({ dispute_id = null, status = null } = {}) {
+    const { rows } = await pool.query(
+      `SELECT * FROM dispute_bonds
+       WHERE ($1::text IS NULL OR dispute_id = $1) AND ($2::text IS NULL OR status = $2)
+       ORDER BY created_at DESC`,
+      [dispute_id, status]
+    );
+    return rows;
+  },
+
+  /**
+   * Aggregate bond accounting. Amounts are strings so large sums stay exact.
+   *
+   * @returns {Promise<{ total_bonds_deposited: string, total_bonds_settled: string, expected_escrow_holdings: string, active_disputes: number }>}
+   */
+  async getBondAccounting() {
+    const { rows } = await pool.query(`
+      SELECT
+        COALESCE(SUM(amount), 0)::text AS total_bonds_deposited,
+        COALESCE(SUM(settled_amount), 0)::text AS total_bonds_settled,
+        (COALESCE(SUM(amount), 0) - COALESCE(SUM(settled_amount), 0))::text AS expected_escrow_holdings,
+        (COUNT(DISTINCT dispute_id) FILTER (WHERE status = 'deposited'))::int AS active_disputes
+      FROM dispute_bonds
+    `);
+    return rows[0];
   },
 
   /**
