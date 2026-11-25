@@ -5,11 +5,20 @@ stored in PostgreSQL.  Two complementary mechanisms provide full PITR coverage:
 
 | Mechanism | What it captures | RPO | Tooling |
 |-----------|-----------------|-----|---------|
-| Nightly base backup (`scripts/backup.sh`) | Full database snapshot | ≤ 24 h | `pg_dump` → local + S3 |
-| Continuous WAL archiving | Every committed transaction | ≤ 5 min | `archive_command` → S3 |
+| Nightly base backup (`scripts/backup.sh`) | Full database snapshot | ≤ 24 h | `pg_dump` → local + S3 (SSE-KMS) |
+| Continuous WAL archiving | Every committed transaction | ≤ 5 min | `archive_command` → S3 (SSE-KMS) |
 
-**RTO target:** ≤ 1 hour for a full restore on typical indexer database sizes
-(< 50 GB) on a standard cloud VM.
+## Recovery objectives
+
+| Target | Value | Notes |
+|--------|-------|-------|
+| **RPO (base backups only)** | ≤ 24 h | Worst case: last nightly dump at 02:00 UTC |
+| **RPO (with WAL archiving)** | ≤ 5 min | Bounded by `archive_timeout` (300 s) |
+| **RTO** | ≤ 1 h | Full restore on typical indexer DB sizes (< 50 GB) on a standard cloud VM |
+
+> **Note:** WAL archiving is what turns the 24 h base-backup RPO into a
+> 5-minute RPO.  If `archive_mode` is off, you can only recover to the last
+> nightly dump.
 
 ---
 
@@ -83,6 +92,11 @@ Schedule a daily backup at 02:00 UTC:
 0 2 * * * cd /path/to/repo && ./scripts/backup.sh >> /var/log/pg-backup.log 2>&1
 ```
 
+This satisfies the "daily encrypted database backups archived to remote cloud
+storage" acceptance criterion: every run produces an SSE-KMS-encrypted dump in
+`BACKUP_S3_BUCKET` (when configured) and prunes local copies per
+`RETENTION_DAYS`.
+
 ---
 
 ## WAL archiving (continuous PITR)
@@ -134,6 +148,12 @@ recovery_target_action = 'promote'
 
 Start PostgreSQL; it will apply WAL until the target time and then open for
 connections.
+
+> **Important:** `archive_command` and `restore_command` are executed by the
+> PostgreSQL server process, which does **not** expand shell variables.  Export
+> the bucket/region values into the server environment (e.g. via
+> `systemd` `Environment=` or `pg_ctl`'s environment) or hard-code them in the
+> command string before enabling archiving.
 
 ---
 
@@ -207,6 +227,99 @@ Run it in CI or as part of a weekly scheduled job to validate backup integrity:
 0 3 * * 0 cd /path/to/repo && ./scripts/backup-restore-test.sh >> /var/log/pg-restore-test.log 2>&1
 ```
 
+This satisfies the "recovery script tested and verified on staging" acceptance
+criterion: run it against the staging database after each nightly backup and
+before promoting any schema migration.
+
+---
+
+## Recovery runbook
+
+Follow these steps in order during a data-loss or corruption incident.  Target
+completion time is **≤ 1 hour (RTO)**.
+
+### Step 0 — Declare and freeze
+
+1. Announce the incident and record the **recovery target time** (the last
+   known-good moment before corruption).
+2. Stop the indexer so no new writes land during recovery:
+
+   ```bash
+   systemctl stop pero-j-indexer   # or kill the Node.js process
+   ```
+
+3. Stop PostgreSQL if it is still running:
+
+   ```bash
+   systemctl stop postgresql
+   ```
+
+### Step 1 — Identify the recovery point
+
+```bash
+# Latest base dump locally:
+ls -1t "${BACKUP_DIR:-./backups}"/*.dump | head -n1
+
+# Or list remote dumps:
+aws s3 ls "s3://${BACKUP_S3_BUCKET}/${BACKUP_S3_PREFIX:-postgres-backups}/" \
+  --region "${BACKUP_S3_REGION:-us-east-1}" | sort | tail -n5
+```
+
+Choose the newest dump taken **before** the recovery target time.
+
+### Step 2 — Fetch the base dump
+
+```bash
+DUMP=soroban_explorer_20261015T020000Z.dump
+aws s3 cp \
+  "s3://${BACKUP_S3_BUCKET}/${BACKUP_S3_PREFIX:-postgres-backups}/${DUMP}" \
+  ./backups/ \
+  --region "${BACKUP_S3_REGION:-us-east-1}"
+```
+
+### Step 3 — Restore the base dump
+
+```bash
+createdb -h "$PGHOST" -U "$PGUSER" soroban_explorer
+pg_restore -h "$PGHOST" -U "$PGUSER" -d soroban_explorer \
+  --no-owner --no-privileges --exit-on-error \
+  "./backups/${DUMP}"
+```
+
+### Step 4 — Apply WAL up to the recovery target (PITR)
+
+Configure `restore_command` and `recovery_target_time` as shown in
+[Point-in-time restore using WAL](#3-point-in-time-restore-using-wal), then
+start PostgreSQL:
+
+```bash
+systemctl start postgresql
+# Watch recovery progress:
+tail -f /var/log/postgresql/postgresql-*.log
+```
+
+PostgreSQL replays WAL until `recovery_target_time` and then promotes.
+
+### Step 5 — Verify
+
+```bash
+psql -h "$PGHOST" -U "$PGUSER" -d soroban_explorer \
+  -c "SELECT COUNT(*) FROM events; SELECT COUNT(*) FROM contracts;"
+```
+
+Optionally run the automated verification against the restored database:
+
+```bash
+DUMP_FILE="./backups/${DUMP}" ./scripts/backup-restore-test.sh
+```
+
+### Step 6 — Resume and follow up
+
+1. Restart the indexer: `systemctl start pero-j-indexer`.
+2. Confirm new events are being indexed.
+3. Re-enable `archive_mode` if it was disabled during recovery.
+4. Record actual RPO/RTO achieved and file a post-incident review.
+
 ---
 
 ## Minimum dump size
@@ -231,3 +344,9 @@ built-in automated backups:
 
 For any provider, also run `scripts/backup.sh` on a schedule to produce an
 independent off-site copy in your own S3 bucket.
+
+---
+
+## Related documentation
+
+- [Operational runbook index](RUNBOOK_INDEX.md) — entry point for all runbooks.

@@ -57,21 +57,54 @@ PERO-J decodes contract calls on the fly using an ABI-like metadata registry, tu
 
 ## Quick Start
 
-### Prerequisites
+### One-command local stack (Docker)
+
+The fastest way to get a complete local development environment is Docker
+Compose. A single command starts **PostgreSQL (with migrations pre-applied),
+Redis, a Soroban local sandbox node, the hot-reloading backend API, and the
+frontend dev server**, pre-seeded with test markets and simulated user
+accounts:
+
+```bash
+docker compose up --build
+```
+
+Once the stack is up:
+
+| Service | URL / Port |
+|---------|------------|
+| Frontend (Vite dev server, hot-reload) | http://localhost:5173 |
+| Backend API (hot-reload) | http://localhost:3001 (`/health`) |
+| Soroban local sandbox RPC | http://localhost:8000 |
+| PostgreSQL | `localhost:5432` |
+| Redis | `localhost:6379` |
+
+The seed step creates three test markets (StellarSwap, Blend, Phoenix) and a
+dozen sample decoded events for four simulated wallet addresses, so the
+frontend has data to display immediately.
+
+Defaults work out of the box. To override any setting (database credentials,
+network passphrase, poll interval, API admin key, etc.), copy `.env.example` to
+`.env` next to `docker-compose.yml` and edit it:
+
+```bash
+cp .env.example .env
+```
+
+See [.env.example](.env.example) for all supported indexer, database, contract,
+and SEP-41 settings, and the [Docker Compose](#docker-compose-local-development)
+section below for the full service and configuration reference.
+
+Stop the stack with `docker compose down` (add `-v` to also drop the database
+and Redis volumes).
+
+### Manual setup
+
+#### Prerequisites
 - Rust + `wasm32-unknown-unknown` target
 - [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli)
 - Node.js ≥ 20
 - PostgreSQL
-
-> **Just want to explore the running app?** You can skip everything below and
-> bring up the full stack (PostgreSQL, Redis, Soroban sandbox, indexer, and
-> frontend — pre-seeded with test markets and simulated users) with a single
-> command using Docker. See the [Docker Compose](#docker-compose-local-development)
-> section:
-> ```bash
-> docker compose up --build
-> ```
-> Then open http://localhost:5173.
 
 ### 1. Clone & configure
 ```bash
@@ -419,9 +452,30 @@ The decoder recognises SEP-41 token events (`transfer`, `mint`, `burn`) and form
 
 ---
 
-## Database Backup
+## Database Backup & Point-in-Time Recovery
 
-Automated backups protect all decoded event history and registered ABI metadata stored in PostgreSQL.
+Automated backups protect all decoded event history and registered ABI metadata
+stored in PostgreSQL. In addition to daily base backups, continuous WAL
+archiving enables **point-in-time recovery (PITR)** to any moment within the
+retention window.
+
+> **Full runbook:** see [docs/backup.md](docs/backup.md) for the complete
+> backup/PITR runbook, including RPO and RTO targets, the encrypted S3 archive
+> layout, and step-by-step recovery procedures.
+
+### Automated backups (PITR)
+
+- **Daily base backups** are produced with `pg_basebackup` and uploaded to an
+  encrypted S3 bucket.
+- **Continuous WAL archiving** streams write-ahead log segments to the same
+  encrypted bucket, enabling recovery to any point between base backups.
+- **Recovery test script** (`scripts/restore-test.sh`) validates that a backup
+  can be restored and passes integrity checks; run it after changing backup
+  configuration and on staging.
+
+```bash
+./scripts/restore-test.sh   # verify the latest backup restores cleanly
+```
 
 ### Local Backup Script
 
@@ -455,7 +509,11 @@ Or deploy with a systemd timer, Docker cron, or your platform's scheduled task s
 
 ### Restore Procedure
 
-To restore a backup into PostgreSQL:
+For PITR, follow the runbook in [docs/backup.md](docs/backup.md): restore the
+latest base backup, replay WAL segments up to the target timestamp, and verify
+row counts and the `/health` endpoint before resuming the indexer.
+
+To restore a plain-text dump into PostgreSQL:
 
 ```bash
 # Stop the indexer to avoid data inconsistency
@@ -481,7 +539,7 @@ For cloud-hosted PostgreSQL, enable automated backups via the managed service:
 | **Supabase** | Dashboard > Project Settings > Database > Backups. Enable daily automatic backups. |
 | **Neon** | Dashboard > Settings > Branches & Backups. Configure branch protection and auto-backup retention. |
 
-For any cloud provider, also export a `pg_dump` weekly to object storage (S3, GCS) as an offsite copy.
+For any cloud provider, also export a `pg_dump` weekly to object storage (S3, GCS) as an offsite copy. The PITR scripts in this repository complement (and do not replace) managed-service backups; see [docs/backup.md](docs/backup.md) for the combined workflow.
 
 ---
 
