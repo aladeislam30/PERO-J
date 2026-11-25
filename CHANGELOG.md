@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`77afe59`](../../commit/77afe59c7f07e0c1bf889c0612a7a87a0be88de0))
+
 - Auto-update CHANGELOG.md [skip ci] ([`cefa0eb`](../../commit/cefa0eb1f0185f39434d791e73a7e0554c716e81))
 
 - Document the optimistic oracle lifecycle ([`9c96675`](../../commit/9c96675b692de2388a9fbad431f57970c087aaf2))
@@ -1556,6 +1558,8 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Add interactive ROI and payout calculator to BetSlip ([`e993f59`](../../commit/e993f59cd9b3c44210f446a0145a0de4e40fa209))
 
 - Auto-finalize uncontested submissions ([`5663664`](../../commit/566366403829aca3e6073ffd25a714fa12372ede))
 
