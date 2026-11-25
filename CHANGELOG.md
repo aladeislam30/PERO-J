@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Sanitize query params and validate sort fields ([#1153](../../issues/1153)) ([`3892704`](../../commit/38927049dba2c3f58f349c7d151299073473a614))
+
 - Audit accessibility (a11y) landmarks, ARIA labels, and keyboard navigation ([`caae887`](../../commit/caae887e40c7c8ede4770bdd998f181b7d13434e))
 
 - [#1211](../../issues/1211) test: develop end-to-end integration test covering complete l ([`fc2230d`](../../commit/fc2230d0d120303016e887d9d8db47521c43723d))
@@ -1062,6 +1064,10 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Note that no duplicate 0008 migration prefix exists on main ([#1155](../../issues/1155)) ([`18f1928`](../../commit/18f1928f0ff87173c889a6904c3c7b6918b80b01))
+
+- Auto-update CHANGELOG.md [skip ci] ([`1805f6d`](../../commit/1805f6de5570c2d5034b90075d2cbfb8b0956e58))
+
 - Auto-update CHANGELOG.md [skip ci] ([`56b48cd`](../../commit/56b48cd01ac3b641f45afe292750f74a30077988))
 
 - Auto-update CHANGELOG.md [skip ci] ([`9c0f51e`](../../commit/9c0f51e537081658137e9d2b37cb57ae38d42da3))
@@ -1502,6 +1508,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add migration linter and CI workflow ([#1156](../../issues/1156)) ([`41b61ba`](../../commit/41b61ba5bf50cca6d35e2f84b581e66acbc7eb08))
 
 - Zod event validation with DLQ and single-writer advisory lock ([`8f03bea`](../../commit/8f03beab87b4bf52c9ab763d79ce0704762583bd))
 
@@ -2137,6 +2145,8 @@ Closes [#988](../../issues/988)
 
 
 ### Testing
+
+- Add API integration tests for pagination, filtering and errors ([#1154](../../issues/1154)) ([`8720fe8`](../../commit/8720fe8c8924c091cb9e3ee544d8f2f0094da5e5))
 
 - Cover migration rollback/idempotency ([`407ce84`](../../commit/407ce844094bf26185e9eb3b16460234f17ef898))
 
