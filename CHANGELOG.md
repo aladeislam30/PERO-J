@@ -1068,6 +1068,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`e575b5c`](../../commit/e575b5c878e864b6ac88d2a32185a29455d77562))
+
 - Auto-update CHANGELOG.md [skip ci] ([`11083b8`](../../commit/11083b87f0ced65e16117dbab660c72377439c46))
 
 - Auto-update CHANGELOG.md [skip ci] ([`1e5329b`](../../commit/1e5329b2ee79ddffa8e30133c981157f4d7405c7))
@@ -1562,6 +1564,8 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Add multi-wallet Stellar connection support ([`63b2d7d`](../../commit/63b2d7d5ef387ebbd385ef2f98bedf4626c72ef8))
 
 - Add referral link generator with dynamic social share cards ([`f958641`](../../commit/f9586412f49d73f6ddf2dc21fd8439766c06ace8))
 
