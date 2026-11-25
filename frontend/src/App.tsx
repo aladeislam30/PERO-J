@@ -14,12 +14,15 @@ import ReferralsPage from "./pages/ReferralsPage";
 import ProfilePage from "./pages/ProfilePage";
 import MarketsPage from "./pages/MarketsPage";
 import MarketPage from "./pages/MarketPage";
+import DisputesPage from "./pages/DisputesPage";
+import DisputeDetailPage from "./pages/DisputeDetailPage";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
   const location = useLocation();
 
   return (
+
 
     <div className="app">
       <Nav />
@@ -38,12 +41,15 @@ export default function App() {
             <Route path="/profile/:address" element={<ProfilePage />} />
             <Route path="/markets" element={<MarketsPage />} />
             <Route path="/market/:id" element={<MarketPage />} />
+                        <Route path="/disputes" element={<DisputesPage />} />
+            <Route path="/disputes/:marketId" element={<DisputeDetailPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
       </ErrorBoundary>
       <Footer />
     </div>
+
 
   );
 }
