@@ -8,6 +8,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- [#1207](../../issues/1207) security: add input sanitization and length limits on market ([`2fc32ab`](../../commit/2fc32abbc58e9b76ba1774d0305908af7c8df3da))
+
+Closes [#1207](../../issues/1207)
+
+
+- [#1206](../../issues/1206) security: implement multi-signature admin key requirement for ([`785c5d9`](../../commit/785c5d9dd718db0a93a8422e96b49775ea4a577c))
+
+Closes [#1206](../../issues/1206)
+
+
+- [#1205](../../issues/1205) security: conduct formal invariant audit for contract balance ([`0dd6cd0`](../../commit/0dd6cd048c0b9f6b8f564d827760595b568481db))
+
+Closes [#1205](../../issues/1205)
+
+
+- [#1204](../../issues/1204) feat(monitoring): implement Discord/Slack webhook notificatio ([`db26774`](../../commit/db2677461869616c5026fc4bfd1b7fe8bc0f80cf))
+
+Closes [#1204](../../issues/1204)
+
+
 - [#1203](../../issues/1203) feat(monitoring): configure synthetic probe monitoring fronte ([`a0e5702`](../../commit/a0e5702b48142d6626df3fe41c729c61f166a08c))
 
 Closes [#1203](../../issues/1203)
@@ -1089,6 +1109,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`5da0500`](../../commit/5da0500e4fbefcdcdc1f5af438e48de33e977fe9))
 
 - Auto-update CHANGELOG.md [skip ci] ([`e961884`](../../commit/e961884682d6e601f7e4365e2cae4feec2b24d6e))
 
