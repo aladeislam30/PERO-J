@@ -1,70 +1,117 @@
-import { useState, useCallback } from "react";
+import { useId, useMemo, useState, useCallback } from "react";
 
-// Protocol fee applied to all parimutuel payouts
-const PROTOCOL_FEE = 0.02; // 2%
+export const PROTOCOL_FEE_RATE = 0.02;
 
-interface BetSlipProps {
-  /** Current amount already in the pool (excluding this bet) */
-  poolSize?: number;
-  /** Total prize pool used in payout calculation */
-  totalPool?: number;
-  /** Market/outcome label displayed in the header */
-  marketLabel?: string;
-  /** Called when the user confirms the bet */
-  onPlaceBet?: (stake: number) => void;
+export interface PayoutEstimate {
+  grossPayout: number;
+  protocolFee: number;
+  netReturn: number;
+  profit: number;
+  multiplier: number;
+  roi: number;
 }
 
-/**
- * Calculates the estimated payout using the parimutuel formula:
- *   payout = (stake / (pool + stake)) * totalPool * (1 - fee)
- */
-function calcPayout(stake: number, pool: number, totalPool: number): number {
-  if (stake <= 0 || pool + stake === 0) return 0;
-  return (stake / (pool + stake)) * totalPool * (1 - PROTOCOL_FEE);
+export interface BetSlipProps {
+  pool?: number;
+  poolSize?: number;
+  totalPool?: number;
+  maxStake?: number;
+  initialStake?: number;
+  step?: number;
+  asset?: string;
+  outcome?: string;
+  marketLabel?: string;
+  onStakeChange?: (stake: number) => void;
+  onPlaceBet?: (stake: number, netReturn?: number) => void;
+}
+
+function nonNegative(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+export function calculatePayout(stake: number, pool: number, totalPool: number = pool): PayoutEstimate {
+  const s = nonNegative(stake);
+  const p = nonNegative(pool);
+  const t = nonNegative(totalPool);
+  const denominator = p + s;
+  const grossPayout = denominator > 0 ? (s / denominator) * t : 0;
+  const protocolFee = grossPayout * PROTOCOL_FEE_RATE;
+  const netReturn = grossPayout - protocolFee;
+  const profit = netReturn - s;
+
+  return {
+    grossPayout,
+    protocolFee,
+    netReturn,
+    profit,
+    multiplier: s > 0 ? netReturn / s : 0,
+    roi: s > 0 ? (profit / s) * 100 : 0,
+  };
+}
+
+export function formatAmount(value: number, asset?: string): string {
+  const amount = value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return asset ? `${amount} ${asset}` : amount;
+}
+
+export function formatMultiplier(value: number): string {
+  return `${value.toFixed(2).replace(/\.?0+$/, "")}x`;
 }
 
 export default function BetSlip({
-  poolSize = 1000,
-  totalPool = 5000,
-  marketLabel = "Outcome",
+  pool,
+  poolSize,
+  totalPool,
+  maxStake,
+  initialStake = 10,
+  step = 1,
+  asset = "XLM",
+  outcome,
+  marketLabel,
+  onStakeChange,
   onPlaceBet,
 }: BetSlipProps) {
-  const [stake, setStake] = useState<string>("10");
+  const effectivePool = pool ?? poolSize ?? 1000;
+  const effectiveTotalPool = totalPool ?? (pool ? pool : 5000);
+  const effectiveLabel = outcome ?? marketLabel ?? "Outcome";
+
+  const stakeInputId = useId();
+  const [stakeText, setStakeText] = useState(String(nonNegative(initialStake)));
   const [isOpen, setIsOpen] = useState(false);
   const [placed, setPlaced] = useState(false);
 
-  const stakeNum = parseFloat(stake) || 0;
-  const payout = calcPayout(stakeNum, poolSize, totalPool);
-  const profit = payout - stakeNum;
-  const multiplier = stakeNum > 0 ? payout / stakeNum : 0;
-  const roi = stakeNum > 0 ? (profit / stakeNum) * 100 : 0;
-  const feeAmount = stakeNum > 0 ? (stakeNum / (poolSize + stakeNum)) * totalPool * PROTOCOL_FEE : 0;
+  const stake = nonNegative(Number(stakeText));
+  const sliderMax = Math.max(step, maxStake && maxStake > 0 ? maxStake : effectivePool || 100, stake);
+  const estimate = useMemo(
+    () => calculatePayout(stake, effectivePool, effectiveTotalPool),
+    [stake, effectivePool, effectiveTotalPool],
+  );
 
-  const isValid = stakeNum > 0 && stakeNum <= 100_000;
-
-  const handleStakeChange = useCallback((value: string) => {
-    // Allow only numeric input with up to 2 decimal places
-    if (/^\d*\.?\d{0,2}$/.test(value) || value === "") {
-      setStake(value);
-      setPlaced(false);
-    }
-  }, []);
-
-  const handleSliderChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setStake(e.target.value);
+  const updateStake = useCallback((next: number) => {
+    const value = nonNegative(next);
+    setStakeText(String(value));
     setPlaced(false);
-  }, []);
+    onStakeChange?.(value);
+  }, [onStakeChange]);
+
+  const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const text = event.target.value;
+    if (/^\d*\.?\d{0,2}$/.test(text) || text === "") {
+      setStakeText(text);
+      setPlaced(false);
+      const value = Number(text);
+      onStakeChange?.(Number.isFinite(value) && value > 0 ? value : 0);
+    }
+  }, [onStakeChange]);
 
   const handlePlaceBet = () => {
-    if (!isValid) return;
-    onPlaceBet?.(stakeNum);
+    if (stake <= 0) return;
+    onPlaceBet?.(stake, estimate.netReturn);
     setPlaced(true);
   };
 
-  // ── Mobile: rendered as a bottom drawer ──────────────────────────────────
   return (
     <>
-      {/* Mobile trigger button — visible only on small screens */}
       <button
         type="button"
         className="bet-slip-trigger"
@@ -75,7 +122,6 @@ export default function BetSlip({
         🎯 Place Bet
       </button>
 
-      {/* Overlay backdrop for mobile drawer */}
       {isOpen && (
         <div
           className="bet-slip-backdrop"
@@ -84,14 +130,20 @@ export default function BetSlip({
         />
       )}
 
-      {/* Bet slip panel — sidebar on desktop, bottom drawer on mobile */}
       <aside
-        className={`bet-slip${isOpen ? " bet-slip--open" : ""}`}
-        aria-label="Betting slip"
+        className={`bet-slip${isOpen ? " bet-slip--open" : ""} card`}
+        aria-label="Bet slip payout calculator"
+        style={{ display: "flex", flexDirection: "column", gap: 16 }}
       >
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="bet-slip__header">
-          <h3 className="bet-slip__title">Bet Slip</h3>
+        <div className="bet-slip__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h3 style={{ fontSize: 16, marginBottom: 4 }}>
+              {effectiveLabel ? `Bet on ${effectiveLabel}` : "Bet Slip"}
+            </h3>
+            <p style={{ color: "var(--muted)", fontSize: 12 }}>
+              Estimate your payout before placing a bet.
+            </p>
+          </div>
           <button
             type="button"
             className="bet-slip__close"
@@ -102,163 +154,95 @@ export default function BetSlip({
           </button>
         </div>
 
-        {/* ── Market label ───────────────────────────────────────────── */}
-        <div className="bet-slip__market">
-          <span className="badge">{marketLabel}</span>
-        </div>
-
-        {/* ── Stake input ────────────────────────────────────────────── */}
-        <div className="bet-slip__section">
-          <label htmlFor="bet-stake" className="bet-slip__label">
-            Stake (XLM)
-          </label>
+        <div style={{ display: "grid", gap: 8 }}>
+          <label htmlFor={stakeInputId} style={{ fontWeight: 600 }}>Stake</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              id={stakeInputId}
+              type="number"
+              min={0}
+              step="any"
+              value={stakeText}
+              onChange={handleInputChange}
+              style={{ flex: "1 1 120px" }}
+            />
+            {asset && <span style={{ color: "var(--muted)" }}>{asset}</span>}
+          </div>
           <input
-            id="bet-stake"
-            type="number"
-            min="0.01"
-            max="100000"
-            step="0.01"
-            value={stake}
-            onChange={(e) => handleStakeChange(e.target.value)}
-            placeholder="Enter stake amount"
-            className="bet-slip__input"
-            aria-describedby="bet-stake-hint"
-          />
-          <span id="bet-stake-hint" className="bet-slip__hint">
-            Min: 0.01 XLM · Max: 100,000 XLM
-          </span>
-        </div>
-
-        {/* ── Slider ─────────────────────────────────────────────────── */}
-        <div className="bet-slip__section">
-          <label htmlFor="bet-slider" className="bet-slip__label">
-            Quick select
-          </label>
-          <input
-            id="bet-slider"
             type="range"
-            min="1"
-            max="1000"
-            step="1"
-            value={Math.min(stakeNum, 1000)}
-            onChange={handleSliderChange}
-            className="bet-slip__slider"
-            aria-label="Stake amount slider"
+            min={0}
+            max={sliderMax}
+            step={step}
+            value={Math.min(stake, sliderMax)}
+            onChange={(e) => updateStake(Number(e.target.value))}
+            aria-label="Stake slider"
+            style={{ width: "100%", accentColor: "var(--accent)" }}
           />
-          <div className="bet-slip__slider-labels">
-            <span>1</span>
-            <span>250</span>
-            <span>500</span>
-            <span>750</span>
-            <span>1,000</span>
+          <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", fontSize: 12 }}>
+            <span>{formatAmount(0, asset)}</span>
+            <span>{formatAmount(sliderMax, asset)}</span>
           </div>
         </div>
 
-        {/* ── Quick-select chips ─────────────────────────────────────── */}
-        <div className="bet-slip__chips" role="group" aria-label="Quick stake amounts">
-          {[10, 25, 50, 100, 250].map((amount) => (
-            <button
-              key={amount}
-              type="button"
-              className={`bet-slip__chip${stakeNum === amount ? " bet-slip__chip--active" : ""}`}
-              onClick={() => { setStake(String(amount)); setPlaced(false); }}
-              aria-pressed={stakeNum === amount}
-            >
-              {amount}
-            </button>
-          ))}
+        <div style={{ display: "grid", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+          <h4 style={{ fontSize: 14, marginBottom: 4 }}>Estimated payout</h4>
+          <DetailRow label="Gross payout" value={formatAmount(estimate.grossPayout, asset)} />
+          <DetailRow
+            label="Protocol fee (2%)"
+            value={`-${formatAmount(estimate.protocolFee, asset)}`}
+            tone="fee"
+          />
+          <DetailRow label="Net return" value={formatAmount(estimate.netReturn, asset)} tone="strong" />
+          <DetailRow
+            label="Potential profit"
+            value={`${estimate.profit >= 0 ? "+" : "-"}${formatAmount(Math.abs(estimate.profit), asset)}`}
+            tone={estimate.profit >= 0 ? "positive" : "negative"}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <span className="badge green">{formatMultiplier(estimate.multiplier)}</span>
+            <span className={`badge ${estimate.roi >= 0 ? "green" : "yellow"}`}>
+              {estimate.roi >= 0 ? "+" : ""}{estimate.roi.toFixed(1)}% ROI
+            </span>
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: 12 }}>
+            A 2% protocol fee is deducted from the gross payout. Figures update as you adjust your stake.
+          </p>
         </div>
-
-        {/* ── Payout breakdown ───────────────────────────────────────── */}
-        <div className="bet-slip__breakdown" aria-live="polite" aria-label="Payout breakdown">
-          <div className="bet-slip__row">
-            <span className="bet-slip__row-label">Pool size</span>
-            <span className="bet-slip__row-value">
-              {poolSize.toLocaleString()} XLM
-            </span>
-          </div>
-          <div className="bet-slip__row">
-            <span className="bet-slip__row-label">Your share</span>
-            <span className="bet-slip__row-value">
-              {stakeNum > 0
-                ? ((stakeNum / (poolSize + stakeNum)) * 100).toFixed(2) + "%"
-                : "—"}
-            </span>
-          </div>
-          <div className="bet-slip__row">
-            <span className="bet-slip__row-label">Protocol fee (2%)</span>
-            <span className="bet-slip__row-value bet-slip__row-value--muted">
-              {feeAmount > 0 ? `−${feeAmount.toFixed(4)} XLM` : "—"}
-            </span>
-          </div>
-
-          <div className="bet-slip__divider" />
-
-          <div className="bet-slip__row bet-slip__row--highlight">
-            <span className="bet-slip__row-label">Estimated payout</span>
-            <span className="bet-slip__row-value bet-slip__row-value--accent">
-              {payout > 0 ? `${payout.toFixed(4)} XLM` : "—"}
-            </span>
-          </div>
-          <div className="bet-slip__row">
-            <span className="bet-slip__row-label">Net profit</span>
-            <span
-              className={`bet-slip__row-value${
-                profit > 0
-                  ? " bet-slip__row-value--green"
-                  : profit < 0
-                  ? " bet-slip__row-value--red"
-                  : ""
-              }`}
-            >
-              {profit !== 0
-                ? `${profit >= 0 ? "+" : ""}${profit.toFixed(4)} XLM`
-                : "—"}
-            </span>
-          </div>
-          <div className="bet-slip__row">
-            <span className="bet-slip__row-label">Multiplier</span>
-            <span className="bet-slip__row-value">
-              {multiplier > 0 ? `${multiplier.toFixed(2)}×` : "—"}
-            </span>
-          </div>
-          <div className="bet-slip__row">
-            <span className="bet-slip__row-label">ROI</span>
-            <span
-              className={`bet-slip__row-value${
-                roi > 0
-                  ? " bet-slip__row-value--green"
-                  : roi < 0
-                  ? " bet-slip__row-value--red"
-                  : ""
-              }`}
-            >
-              {roi !== 0 ? `${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%` : "—"}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Place bet button ───────────────────────────────────────── */}
-        <button
-          type="button"
-          className="bet-slip__cta"
-          disabled={!isValid || placed}
-          onClick={handlePlaceBet}
-          aria-disabled={!isValid || placed}
-        >
-          {placed
-            ? "✓ Bet Placed!"
-            : isValid
-            ? `Place Bet — ${stakeNum.toLocaleString()} XLM`
-            : "Enter a valid stake"}
-        </button>
 
         {placed && (
-          <p className="bet-slip__confirm" role="status">
-            Your bet of {stakeNum.toLocaleString()} XLM has been submitted.
-          </p>
+          <div className="badge green" role="status" style={{ textAlign: "center", padding: "8px" }}>
+            ✓ Bet placed successfully!
+          </div>
         )}
+
+        <button
+          type="button"
+          disabled={stake <= 0}
+          onClick={handlePlaceBet}
+          style={{ width: "100%" }}
+        >
+          Place bet
+        </button>
       </aside>
     </>
+  );
+}
+
+function DetailRow({ label, value, tone }: {
+  label: string;
+  value: string;
+  tone?: "default" | "fee" | "strong" | "positive" | "negative";
+}) {
+  const color =
+    tone === "fee" || tone === "negative" ? "var(--yellow)" :
+    tone === "positive" ? "var(--green)" : undefined;
+
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+      <span style={{ color: color ?? "var(--muted)" }}>{label}</span>
+      <strong style={{ color, fontWeight: tone === "strong" ? 700 : 500, fontVariantNumeric: "tabular-nums" }}>
+        {value}
+      </strong>
+    </div>
   );
 }
