@@ -78,3 +78,9 @@ Both rules dispatch paging notifications to the designated operators through
 Alertmanager. Verify the receiver configuration in
 `infra/monitoring/alertmanager.yml` points at the operations on-call rotation
 before relying on these alerts in production.
+2. **Emergency Fallback (if quorum unreachable)**:
+   - If council members are offline past 48 hours, follow protocol charter Article IV (Emergency Governor fallback vote or protocol multisig resolution).
+
+## Related Runbook: Contract Upgrade Playbook
+
+For the full step-by-step procedure to upgrade live Soroban contracts (build optimized WASM, compute SHA-256 hash, deploy to Testnet, run migration tests, verify byte-for-byte hash identity, execute the multi-sig admin upgrade on Mainnet, verify event indexing resumes, and roll back or abort on failure), see [`docs/CONTRACT_UPGRADE_PLAYBOOK.md`](./CONTRACT_UPGRADE_PLAYBOOK.md).
