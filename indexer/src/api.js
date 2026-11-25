@@ -23,6 +23,10 @@ import {
   verifyAndConsumeOracleAttestation,
   OracleVerificationError,
 } from "./oracle.js";
+import { routeRateLimit } from "./routeRateLimit.js";
+import { requestIdMiddleware } from "./requestContext.js";
+import { httpMetricsMiddleware } from "./middleware/httpMetrics.js";
+import { registerOpenApi } from "./openapi.js";
 
 
 const PORT = process.env.PORT || 3001;
@@ -218,6 +222,8 @@ export function createApp() {
   marketCacheManager.start();
   const app = express();
   let distinctFunctionsCache = null;
+  app.use(requestIdMiddleware); // X-Request-ID + AsyncLocalStorage (#1151)
+  app.use(httpMetricsMiddleware); // request metrics + optional /metrics auth (#1152)
   app.use(securityHeaders);
   app.use(createCorsMiddleware());
   app.use(express.json());
@@ -226,6 +232,7 @@ export function createApp() {
     res.type("text/plain; version=0.0.4").send(renderMetrics());
   });
 
+  registerOpenApi(app); // GET /api/v1/openapi.json + /api/v1/docs (#1150)
   registerOracleRoutes(app, requireAdminKey, asyncHandler);
 
   // GET /health — liveness + readiness probe for container orchestrators and uptime monitors
@@ -285,6 +292,8 @@ export function createApp() {
     })
   );
 
+  app.use("/api", routeRateLimit); // per-route buckets (#1149)
+
   // Rate limiter applies to /api/* routes to protect endpoints against DoS while exempting /health and /ready probes
   app.use(
     "/api",
@@ -293,6 +302,7 @@ export function createApp() {
       max: 100,
       standardHeaders: true,
       legacyHeaders: false,
+      skip: (req) => req.perRouteRateLimited === true,
     })
   );
 

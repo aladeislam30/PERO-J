@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import pg from "pg";
 import { createHash } from "node:crypto";
 import { eventEmitter } from "./events.js";
+import { tagSqlWithRequestId } from "./requestContext.js";
+import { observeHistogram } from "./metrics.js";
 
 /** @typedef {import('./types.js').DecodedEvent} DecodedEvent */
 /** @typedef {import('./types.js').ContractMeta} ContractMeta */
@@ -342,7 +344,17 @@ export const db = {
    * @param {any[]} [params]
    */
   async query(text, params) {
-    return pool.query(text, params);
+    const started = process.hrtime.bigint();
+    try {
+      return await pool.query(tagSqlWithRequestId(text), params);
+    } finally {
+      observeHistogram(
+        "db_query_duration_seconds",
+        "DB query duration in seconds (db.query only)",
+        {},
+        Number(process.hrtime.bigint() - started) / 1e9,
+      );
+    }
   },
 
   /**
