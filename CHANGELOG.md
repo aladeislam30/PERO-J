@@ -8,6 +8,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- [#1211](../../issues/1211) test: develop end-to-end integration test covering complete l ([`fc2230d`](../../commit/fc2230d0d120303016e887d9d8db47521c43723d))
+
+Closes [#1211](../../issues/1211)
+
+
+- [#1210](../../issues/1210) security: implement replay attack defenses on off-chain oracl ([`6198aa2`](../../commit/6198aa2bfbb5933a1c4a54cc6a2fb402e1eed4be))
+
+Closes [#1210](../../issues/1210)
+
+
+- [#1209](../../issues/1209) security: add slippage protection for user bets placed during ([`45ebe10`](../../commit/45ebe100f8642849b0d76297722d57b6077b6c5c))
+
+Closes [#1209](../../issues/1209)
+
+
+- [#1208](../../issues/1208) security: implement CORS and security headers policy (CSP, HS ([`d72bfdb`](../../commit/d72bfdbed60657306a6d6a2ec370c198f18cb9ad))
+
+Closes [#1208](../../issues/1208)
+
+
 - [#1199](../../issues/1199) feat(monitoring): configure alert rules for stuck markets (>4 ([`62549f7`](../../commit/62549f7a7db787441e97b899176644effb92f7ff))
 
 Closes [#1199](../../issues/1199)
@@ -1037,6 +1057,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`6d38d2d`](../../commit/6d38d2d426f791559f39147b8b074605940b1c47))
 
 - Auto-update CHANGELOG.md [skip ci] ([`fe99aae`](../../commit/fe99aae594ab7e748415988da3641bb971567eea))
 
