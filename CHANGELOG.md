@@ -1070,6 +1070,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`2e59e2f`](../../commit/2e59e2f71087c21529d846c43cf05ee746c2f35b))
+
 - Auto-update CHANGELOG.md [skip ci] ([`daacb20`](../../commit/daacb20a918ca206e9e74b387d275ba2f19774a1))
 
 - Auto-update CHANGELOG.md [skip ci] ([`5155d20`](../../commit/5155d20843d9189b998e387cb872cdd0c69359cd))
@@ -1574,6 +1576,10 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- Add live market updates ([#1173](../../issues/1173)) ([`6963627`](../../commit/6963627805cdf873ecf50a70cb396d1abb45a589))
+
+- Add oracle status badges to market cards ([#1167](../../issues/1167)) ([`3e8bc2c`](../../commit/3e8bc2c7cfba0e6aa4b9facdd0d9fe7a85dba0d0))
 
 - [#1169](../../issues/1169) add challenge outcome modal with live countdown and optimistic update ([`498cdf1`](../../commit/498cdf1306473740bc030f207939bf10dab4a336))
 
