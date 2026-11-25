@@ -1053,10 +1053,14 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### CI / CD
 
+- Add cargo audit, npm audit, and dependabot vulnerability scanning ([`fe9d9c1`](../../commit/fe9d9c1174ed4e5537080b803c28984782c24bff))
+
 - Fix frontend Node and lockfile ([`bbf0ec1`](../../commit/bbf0ec1ae4733eb5bde2275dbc0e60b3e50d558d))
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`9c0f51e`](../../commit/9c0f51e537081658137e9d2b37cb57ae38d42da3))
 
 - Auto-update CHANGELOG.md [skip ci] ([`f984ca4`](../../commit/f984ca4c0fa390f36af92e70621f2911b707c697))
 
