@@ -66,6 +66,26 @@ The indexer container exposes two health endpoints:
    kubectl logs -f deployment/frontend
    ```
 
+## Automated Stellar Testnet staging
+
+The `deploy-staging.yml` GitHub Actions workflow builds and pushes the indexer
+and frontend images to GHCR on every push to `main`. When staging credentials
+are configured, it applies the testnet ConfigMap and Kubernetes resources,
+waits for both deployments to roll out concurrently, and runs
+`scripts/smoke-test.sh`. The deploy and smoke-test job has a 10-minute timeout.
+
+Configure these repository Actions secrets to enable deployment:
+
+- `KUBECONFIG_STAGING`: base64-encoded kubeconfig for the staging cluster.
+- `STAGING_DATABASE_URL`: staging PostgreSQL connection string.
+- `STAGING_API_ADMIN_KEY` (optional): API admin key.
+- `STAGING_EXPLORER_ADMIN_SECRET` (optional): on-chain event submission key.
+
+Without the first two secrets, the workflow still builds and publishes the
+images but explicitly skips deployment and smoke tests. Configure and verify
+the staging cluster and secrets before expecting a merge to update the live
+staging environment.
+
 
 ## Production image hardening
 
