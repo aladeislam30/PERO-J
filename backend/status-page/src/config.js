@@ -11,6 +11,14 @@ function num(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+function list(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  return String(value)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 export function loadConfig(env = process.env) {
   return {
     port: num(env.STATUS_PORT ?? env.PORT, 3005),
@@ -43,5 +51,42 @@ export function loadConfig(env = process.env) {
     incidentsFile: env.STATUS_INCIDENTS_FILE || new URL("../incidents.json", import.meta.url).pathname,
     /** Optional maintenance banner shown on the page. */
     maintenanceMessage: env.STATUS_MAINTENANCE_MESSAGE || "",
+
+    /**
+     * Browser security policy (issue #1208).
+     *
+     * `corsOrigins` is a strict allowlist of frontend origins permitted to make
+     * cross-origin requests. `csp` restricts script and connect sources to the
+     * trusted domains the status page actually talks to. HSTS enforces HTTPS
+     * for one year with preload, and framing / MIME sniffing are disabled.
+     */
+    security: {
+      corsOrigins: list(env.STATUS_CORS_ORIGINS, [
+        "https://status.stellar.org",
+        "https://app.stellar.org",
+      ]),
+      csp: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        connectSrc: [
+          "'self'",
+          env.HORIZON_URL || "https://horizon-testnet.stellar.org",
+          env.RPC_URL || "https://soroban-testnet.stellar.org",
+          env.API_URL || env.INDEXER_URL || "http://localhost:3001",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+      },
+      hsts: {
+        maxAge: 31_536_000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+      },
+      frameguard: "deny",
+      noSniff: true,
+    },
   };
 }

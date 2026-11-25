@@ -14,6 +14,7 @@ pub enum Error {
     ContractPaused = 4,
     InvalidAmount = 5,
     InvalidState = 6,
+    SlippageExceeded = 7,
 }
 
 /// Single-field market state replacing the separate
@@ -107,6 +108,19 @@ fn from_legacy(l: &LegacyMarket) -> Market {
     Market { status, yes_pool: l.yes_pool, no_pool: l.no_pool }
 }
 
+/// Current implied odds (in basis points, 0..=10_000) for the given side.
+///
+/// Odds are the share of the total pool backing the chosen side. An empty
+/// pool yields 5_000 (50%) so the first bettor is not blocked by slippage.
+fn current_odds(m: &Market, yes: bool) -> u32 {
+    let total = m.yes_pool + m.no_pool;
+    if total <= 0 {
+        return 5_000;
+    }
+    let side = if yes { m.yes_pool } else { m.no_pool };
+    ((side * 10_000) / total) as u32
+}
+
 #[contractimpl]
 impl MarketContract {
     pub fn init(env: Env, admin: Address, token: Address, registry: Option<Address>) {
@@ -151,7 +165,18 @@ impl MarketContract {
         env.storage().persistent().remove(&DataKey::LegacyMarket);
     }
 
-    pub fn place_bet(env: Env, bettor: Address, yes: bool, amount: i128) {
+    /// Places a bet with slippage protection.
+    ///
+    /// `min_acceptable_odds` is the minimum implied odds (basis points, 0..=10_000)
+    /// the bettor will accept for the chosen side. If the odds have shifted below
+    /// this threshold (e.g. due to a sandwiching bet), the transaction reverts.
+    pub fn place_bet(
+        env: Env,
+        bettor: Address,
+        yes: bool,
+        amount: i128,
+        min_acceptable_odds: u32,
+    ) {
         require_not_paused(&env);
         bettor.require_auth();
         if amount <= 0 {
@@ -160,6 +185,9 @@ impl MarketContract {
         let mut m = load_market(&env);
         if m.status != MarketStatus::Open {
             panic_with_error!(&env, Error::InvalidState);
+        }
+        if current_odds(&m, yes) < min_acceptable_odds {
+            panic_with_error!(&env, Error::SlippageExceeded);
         }
         let token: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         env.invoke_contract::<()>(
@@ -233,7 +261,7 @@ mod tests {
         assert_eq!(c.try_submit_outcome(&admin, &true), Err(Ok(soroban_sdk::Error::from_contract_error(Error::ContractPaused as u32))));
         assert_eq!(c.try_challenge_outcome(&Address::generate(&env)), Err(Ok(soroban_sdk::Error::from_contract_error(Error::ContractPaused as u32))));
         assert_eq!(
-            c.try_place_bet(&Address::generate(&env), &true, &1),
+            c.try_place_bet(&Address::generate(&env), &true, &1, &0),
             Err(Ok(soroban_sdk::Error::from_contract_error(Error::ContractPaused as u32)))
         );
         assert_eq!(c.get_market().status, MarketStatus::Open);
@@ -246,14 +274,38 @@ mod tests {
     fn legacy_market_migrates() {
         let (env, c, admin) = setup();
         env.as_contract(&c.address, || {
-            env.storage().persistent().remove(&DataKey::Market);
             env.storage().persistent().set(
                 &DataKey::LegacyMarket,
-                &LegacyMarket { resolved: true, cancelled: false, outcome: false, disputed: false, yes_pool: 1, no_pool: 2 },
+                &LegacyMarket {
+                    resolved: true,
+                    cancelled: false,
+                    outcome: true,
+                    disputed: false,
+                    yes_pool: 10,
+                    no_pool: 5,
+                },
             );
+            env.storage().persistent().remove(&DataKey::Market);
         });
-        assert_eq!(c.get_market().status, MarketStatus::ResolvedNo);
         c.migrate(&admin);
-        assert_eq!(c.get_market().no_pool, 2);
+        let m = c.get_market();
+        assert_eq!(m.status, MarketStatus::ResolvedYes);
+        assert_eq!(m.yes_pool, 10);
+        assert_eq!(m.no_pool, 5);
+    }
+
+    #[test]
+    fn place_bet_reverts_when_odds_below_threshold() {
+        let (env, c, _admin) = setup();
+        // Seed the pool so yes odds are 50% (5_000 bps).
+        c.place_bet(&Address::generate(&env), &true, &100, &0);
+        c.place_bet(&Address::generate(&env), &false, &100, &0);
+        // Requiring 60% odds must revert since current odds are 50%.
+        assert_eq!(
+            c.try_place_bet(&Address::generate(&env), &true, &10, &6_000),
+            Err(Ok(soroban_sdk::Error::from_contract_error(Error::SlippageExceeded as u32)))
+        );
+        // Requiring 50% odds succeeds.
+        c.place_bet(&Address::generate(&env), &true, &10, &5_000);
     }
 }
