@@ -591,3 +591,5 @@ PRs welcome. Please open an issue first for large changes.
 
 <!-- handsoff-issue-1198 -->
 - #1198: feat(monitoring): configure alert rules for indexer stall (lag > 100 ledgers) and RPC failure bursts
+<!-- handsoff-issue-1200 -->
+- #1200: feat(monitoring): implement Grafana dashboards for pipeline health, oracle states, and business KPIs

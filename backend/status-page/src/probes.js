@@ -88,6 +88,63 @@ function latencyStatus(latencyMs, cfg) {
   return latencyMs > cfg.thresholds.latencyDegradedMs ? STATUS.DEGRADED : STATUS.OPERATIONAL;
 }
 
+/**
+ * Synthetic frontend uptime probe.
+ *
+ * Verifies the public frontend `/health` endpoint returns HTTP 200 from an
+ * external vantage point and fires an alert when the response time exceeds the
+ * configured budget (default 2.5s). Intended to run on a 30s interval.
+ */
+export async function probeFrontend(cfg, fetchImpl = fetch) {
+  const base = {
+    id: "frontend",
+    name: "Frontend Web App",
+    description: "Public web application served to end users via CDN.",
+  };
+  if (!cfg.frontendUrl) {
+    return result(base, { status: STATUS.UNKNOWN, message: "Frontend health endpoint not configured (FRONTEND_URL)" });
+  }
+  const alertThresholdMs = cfg.thresholds.frontendAlertMs ?? 2500;
+  try {
+    const res = await timedFetch(`${cfg.frontendUrl.replace(/\/$/, "")}/health`, {
+      timeoutMs: cfg.probeTimeoutMs,
+      fetchImpl,
+    });
+    const details = {
+      httpStatus: res.status,
+      alertThresholdMs,
+      alert: false,
+    };
+
+    if (!res.ok || res.status !== 200) {
+      return result(base, {
+        status: STATUS.MAJOR_OUTAGE,
+        latencyMs: res.latencyMs,
+        message: `Frontend /health returned HTTP ${res.status}`,
+        details: { ...details, alert: true },
+      });
+    }
+
+    if (res.latencyMs > alertThresholdMs) {
+      return result(base, {
+        status: STATUS.DEGRADED,
+        latencyMs: res.latencyMs,
+        message: `Frontend response time ${res.latencyMs}ms exceeds ${alertThresholdMs}ms budget`,
+        details: { ...details, alert: true },
+      });
+    }
+
+    return result(base, {
+      status: latencyStatus(res.latencyMs, cfg),
+      latencyMs: res.latencyMs,
+      message: `Frontend healthy (${res.latencyMs}ms)`,
+      details,
+    });
+  } catch (err) {
+    return failure(base, err);
+  }
+}
+
 /** Stellar Horizon + Soroban RPC node. */
 export async function probeStellar(cfg, fetchImpl = fetch) {
   const base = {
@@ -219,48 +276,4 @@ export async function probeOracle(cfg, fetchImpl = fetch) {
     const res = await timedFetch(`${cfg.oracleUrl.replace(/\/$/, "")}/health`, { timeoutMs: cfg.probeTimeoutMs, fetchImpl });
     const body = res.body && typeof res.body === "object" ? res.body : {};
     const details = {
-      activeResolvers: body.active_resolvers ?? body.activeResolvers ?? null,
-      pendingProposals: body.pending_proposals ?? body.pendingProposals ?? null,
-      activeDisputes: body.active_disputes ?? body.activeDisputes ?? null,
-    };
-    if (!res.ok || body.status === "error") {
-      return result(base, { status: STATUS.MAJOR_OUTAGE, latencyMs: res.latencyMs, message: `Oracle returned HTTP ${res.status}`, details });
-    }
-    if (body.status === "degraded" || details.activeResolvers === 0) {
-      return result(base, { status: STATUS.DEGRADED, latencyMs: res.latencyMs, message: "Oracle resolvers degraded", details });
-    }
-    return result(base, { status: latencyStatus(res.latencyMs, cfg), latencyMs: res.latencyMs, message: "Resolvers healthy", details });
-  } catch (err) {
-    return failure(base, err);
-  }
-}
-
-/** Public backend REST API. */
-export async function probeApi(cfg, fetchImpl = fetch) {
-  const base = {
-    id: "api",
-    name: "Backend REST API",
-    description: "Public REST endpoints consumed by the web app and integrators.",
-  };
-  try {
-    const res = await timedFetch(`${cfg.apiUrl.replace(/\/$/, "")}/ready`, { timeoutMs: cfg.probeTimeoutMs, fetchImpl });
-    if (!res.ok) {
-      return result(base, { status: STATUS.MAJOR_OUTAGE, latencyMs: res.latencyMs, message: `API returned HTTP ${res.status}` });
-    }
-    const status = latencyStatus(res.latencyMs, cfg);
-    return result(base, {
-      status,
-      latencyMs: res.latencyMs,
-      message: status === STATUS.OPERATIONAL ? "Responding normally" : `Elevated latency (${res.latencyMs}ms)`,
-    });
-  } catch (err) {
-    return failure(base, err);
-  }
-}
-
-export const PROBES = [probeStellar, probeIndexer, probeOracle, probeApi];
-
-/** Run every probe concurrently. */
-export async function runAllProbes(cfg, fetchImpl = fetch) {
-  return Promise.all(PROBES.map((probe) => probe(cfg, fetchImpl)));
-}
+      activeResolvers: body.active_resolvers ?? body.activeR

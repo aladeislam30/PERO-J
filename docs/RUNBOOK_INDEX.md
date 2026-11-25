@@ -1,10 +1,18 @@
-# Operational Runbook Index
+# Runbook Index
 
-This document provides a centralized registry mapping operational Prometheus alerts to their corresponding remediation runbooks, verification commands, and automated remediation CLI scripts.
+This index maps every active operational alert to the runbook that contains its
+step-by-step recovery procedure. On-call engineers should open the linked
+runbook as soon as an alert fires.
 
----
+| Alert | Runbook |
+| --- | --- |
+| `IndexerStalled` | [INDEXER_RUNBOOK.md](./INDEXER_RUNBOOK.md) |
+| `MarketStuck` | [ORACLE_RUNBOOK.md](./ORACLE_RUNBOOK.md) |
+| `LeaderboardDrift` | [LEADERBOARD_REBUILD_RUNBOOK.md](./LEADERBOARD_REBUILD_RUNBOOK.md) |
+| `RPCHighErrorRate` | [ORACLE_ADAPTER_FRESHNESS.md](./ORACLE_ADAPTER_FRESHNESS.md) |
 
-## 1. Alert to Runbook Mapping Matrix
+## Verification Commands
+
 
 | Prometheus Alert Name | Target Service | Severity | Markdown Runbook | Verification Command | Remediation Script |
 |---|---|---|---|---|---|
@@ -15,93 +23,12 @@ This document provides a centralized registry mapping operational Prometheus ale
 | **`CouncilVoteStalled`** | `governance` | `High` | [COUNCIL_RUNBOOK.md](COUNCIL_RUNBOOK.md) | `curl -s http://localhost:3001/api/disputes?status=escalated` | N/A (Governance Quorum Notification) |
 | **`BackupFailed`** / `PITRRestoreTestFailed` | `db` / `backup` | `Critical` | [backup.md](backup.md) | `./scripts/backup-restore-test.sh` | [`scripts/backup.sh`](../scripts/backup.sh) |
 
----
 
-## 2. On-Call Incident Triage Workflow
+```bash
+# Confirm which alerts are currently firing
+curl -s http://localhost:9090/api/v1/alerts | jq '.data.alerts[] | {name: .labels.alertname, state: .state}'
 
-```text
-[Prometheus Alert Fired]
-           │
-           ▼
-[Alertmanager Dispatches PagerDuty / Slack]
-           │
-           ▼
-[On-Call Engineer Consults docs/RUNBOOK_INDEX.md]
-           │
-           ├─► IndexerStalled    ──► Check lag & logs ──► Run restart_indexer.sh
-           ├─► MarketStuck       ──► Inspect oracle   ──► Run resolve_stuck_market.sh
-           ├─► LeaderboardDrift  ──► Check drift SQL  ──► Run rebuild_leaderboard.sh
-           ├─► BackupFailed      ──► Check WAL archive ──► Run backup.sh
-           ├─► PITRRestoreTestFailed ──► Inspect restore logs ──► Run backup-restore-test.sh
-           └─► RPCHighErrorRate  ──► Test RPC latency ──► Run switch_rpc_provider.sh
-           │
-           ▼
-[Verify Alert Resolves & Post Incident Status Update]
-```
+# IndexerStalled: check indexer progress
+curl -s http://localhost:9090/api/v1/query \
+  --data-urlencode 'query=indexer_last_processed_ledger' | jq '.data.result'
 
----
-
-## 3. Alert Deep-Dives & Remediation Summary
-
-### IndexerStalled
-- **Trigger**: `indexer_lag_ledgers > 100` for 3 minutes.
-- **Runbook**: [INDEXER_RUNBOOK.md](INDEXER_RUNBOOK.md)
-- **Remediation**:
-  ```bash
-  # Check status and restart indexer
-  ./scripts/remediation/restart_indexer.sh
-  ```
-
-### MarketStuck
-- **Trigger**: `count(markets{status="open", ends_at_elapsed_hours > 48}) > 0` for 5 minutes.
-- **Runbook**: [ORACLE_RUNBOOK.md](ORACLE_RUNBOOK.md)
-- **Remediation**:
-  ```bash
-  # Force re-poll oracle feed or execute manual settlement
-  ./scripts/remediation/resolve_stuck_market.sh <MARKET_ID> [OUTCOME_ID]
-  ```
-
-### LeaderboardDrift
-- **Trigger**: `abs(leaderboard_points_sum - event_points_sum) > 0`
-- **Runbook**: [LEADERBOARD_REBUILD_RUNBOOK.md](LEADERBOARD_REBUILD_RUNBOOK.md)
-- **Remediation**:
-  ```bash
-  # Recompute aggregates and refresh materialized views
-  ./scripts/remediation/rebuild_leaderboard.sh
-  ```
-
-### RPCHighErrorRate
-- **Trigger**: `rate(rpc_errors_total[5m]) > 0.05` for 2 minutes.
-- **Runbook**: [ORACLE_ADAPTER_FRESHNESS.md](ORACLE_ADAPTER_FRESHNESS.md)
-- **Remediation**:
-  ```bash
-  # Failover to backup Soroban RPC provider
-  ./scripts/remediation/switch_rpc_provider.sh https://soroban-rpc.backup.provider.com
-  ```
-
-### BackupFailed / PITRRestoreTestFailed
-- **Trigger**: `backup_last_success_timestamp_seconds` older than 24h, or `pitr_restore_test_success == 0` after a scheduled restore test.
-- **Runbook**: [backup.md](backup.md)
-- **Targets**: RPO ≤ 24h (daily base backup) with continuous WAL archiving for point-in-time recovery; RTO ≤ 2h for full restore on staging.
-- **Remediation**:
-  ```bash
-  # Trigger an on-demand encrypted base backup + WAL archive to S3
-  ./scripts/backup.sh
-
-  # Validate restoration of the latest backup into a scratch database (PITR test)
-  ./scripts/backup-restore-test.sh
-  ```
-- **Verification**:
-  ```bash
-  # Confirm the latest backup object exists and is encrypted in the remote bucket
-  aws s3 ls "$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX" --recursive | tail -n 5
-
-  # Confirm restore test exit status and reported RTO
-  ./scripts/backup-restore-test.sh --verify-only
-  ```
-
----
-
-## 4. Verification & Testing
-
-All procedures documented above have been verified with corresponding automated recovery scripts located in [`scripts/remediation/`](../scripts/remediation/).
