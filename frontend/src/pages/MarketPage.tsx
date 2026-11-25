@@ -1,10 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import ChallengeOutcomeModal from "../components/ChallengeOutcomeModal";
 import FinalizeMarketButton from "../components/FinalizeMarketButton";
+import { useCountdown, formatCountdown } from "../hooks/useCountdown";
 import { useDispute } from "../hooks/useDisputes";
 import { useMarket } from "../hooks/useMarkets";
-import { recordFinalization } from "../markets/storage";
+import { markMarketChallenged, recordFinalization, writeMarket } from "../markets/storage";
+import type { Market } from "../markets/types";
 import { shortenTxHash, stellarExpertTxUrl } from "../oracleBonds";
 
 export default function MarketPage() {
@@ -12,6 +15,9 @@ export default function MarketPage() {
   const market = useMarket(id);
   const dispute = useDispute(id);
   const queryClient = useQueryClient();
+  const remaining = useCountdown(market?.challengeDeadline ?? "");
+  const [challengeOpen, setChallengeOpen] = useState(false);
+  const [challengeSnapshot, setChallengeSnapshot] = useState<Market | undefined>();
 
   useEffect(() => {
     document.title = market
@@ -71,18 +77,52 @@ export default function MarketPage() {
             <p style={{ color: "var(--muted)", marginBottom: 12 }}>
               Challenge deadline: {new Date(market.challengeDeadline).toLocaleString()}
             </p>
-            <FinalizeMarketButton
-              marketId={market.id}
-              oracleState={market.oracleState}
-              challengeDeadline={market.challengeDeadline}
-              onFinalized={(result) => {
-                recordFinalization(market.id, result.txHash, result.ledger);
-                void queryClient.invalidateQueries({ queryKey: ["market", market.id] });
-              }}
-            />
+            {remaining > 0 ? (
+              <div className="finalize-action">
+                <button type="button" className="finalize-button" onClick={() => setChallengeOpen(true)}>
+                  Challenge outcome
+                </button>
+                <span className="finalize-countdown">
+                  Challenge window closes in {formatCountdown(remaining)}
+                </span>
+              </div>
+            ) : (
+              <FinalizeMarketButton
+                marketId={market.id}
+                oracleState={market.oracleState}
+                challengeDeadline={market.challengeDeadline}
+                onFinalized={(result) => {
+                  recordFinalization(market.id, result.txHash, result.ledger);
+                  void queryClient.invalidateQueries({ queryKey: ["market", market.id] });
+                }}
+              />
+            )}
           </>
         )}
       </section>
+
+      <ChallengeOutcomeModal
+        open={challengeOpen}
+        marketId={market.id}
+        challengeDeadline={market.challengeDeadline}
+        requiredBondXlm={market.challengeBondXlm ?? 0}
+        payoutRewardXlm={market.challengeRewardXlm ?? 0}
+        onClose={() => setChallengeOpen(false)}
+        onOptimisticChallenge={() => {
+          setChallengeSnapshot(market);
+          markMarketChallenged(market.id);
+        }}
+        onChallengeConfirmed={() => {
+          setChallengeSnapshot(undefined);
+          void queryClient.invalidateQueries({ queryKey: ["market", market.id] });
+        }}
+        onChallengeFailed={() => {
+          setChallengeSnapshot((snapshot) => {
+            if (snapshot) writeMarket(snapshot);
+            return undefined;
+          });
+        }}
+      />
     </div>
   );
 }

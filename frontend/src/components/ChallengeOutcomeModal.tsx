@@ -1,210 +1,105 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
+import { useState } from "react";
+import { useToast } from "./Toast";
+import { formatXlm } from "../oracleBonds";
+import { SorobanChallengeGateway, type ChallengeGateway } from "../markets/challengeGateway";
+import type { FinalizeResult } from "../markets/types";
+import { formatCountdown, useCountdown } from "../hooks/useCountdown";
 
-export interface ProposedOutcome {
-  /** Unique identifier of the proposed outcome being challenged. */
-  outcomeId: string;
-  /** Contract the outcome belongs to (used for cache invalidation). */
-  contractId: string;
-  /** Human-readable description of the proposed outcome. */
-  description: string;
-  /** ISO timestamp of the dispute deadline. */
-  deadline: string;
-  /** Required disputer bond amount (in stroops or display units). */
-  bondAmount: string;
-  /** Reward paid out on a successful challenge. */
-  payoutReward: string;
-}
-
-interface ChallengeOutcomeModalProps {
-  outcome: ProposedOutcome;
+interface Props {
+  open: boolean;
+  marketId: string;
+  challengeDeadline: string;
+  requiredBondXlm: number;
+  payoutRewardXlm: number;
   onClose: () => void;
-  /** Optional signer; defaults to api.challengeOutcome. */
-  onChallenge?: (outcomeId: string) => Promise<unknown>;
-}
-
-function formatRemaining(ms: number): string {
-  if (ms <= 0) return "00:00:00";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  onOptimisticChallenge: () => void;
+  onChallengeConfirmed: (result: FinalizeResult) => void;
+  onChallengeFailed: () => void;
+  gateway?: ChallengeGateway;
 }
 
 export default function ChallengeOutcomeModal({
-  outcome,
+  open,
+  marketId,
+  challengeDeadline,
+  requiredBondXlm,
+  payoutRewardXlm,
   onClose,
-  onChallenge,
-}: ChallengeOutcomeModalProps) {
-  const queryClient = useQueryClient();
-  const deadlineMs = useMemo(() => new Date(outcome.deadline).getTime(), [outcome.deadline]);
-  const [now, setNow] = useState(() => Date.now());
+  onOptimisticChallenge,
+  onChallengeConfirmed,
+  onChallengeFailed,
+  gateway,
+}: Props) {
+  const toast = useToast();
+  const remaining = useCountdown(challengeDeadline);
+  const [pending, setPending] = useState(false);
+  const canChallenge = remaining > 0 && requiredBondXlm > 0;
 
-  // Tick every second so the countdown stays live until the deadline.
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  if (!open) return null;
 
-  // Focus trap and Escape key listener for a11y
-  const modalRef = useRef<HTMLDivElement>(null);
+  async function handleSubmit() {
+    if (!canChallenge || pending) return;
+    setPending(true);
+    onOptimisticChallenge();
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (e.key === "Tab" && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        );
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  const remainingMs = deadlineMs - now;
-  const expired = remainingMs <= 0;
-
-  const challengeMutation = useMutation({
-    mutationFn: () =>
-      onChallenge ? onChallenge(outcome.outcomeId) : api.challengeOutcome(outcome.outcomeId),
-    onMutate: async () => {
-      // Optimistic UI: mark the outcome as challenged immediately.
-      
-      await queryClient.cancelQueries({ queryKey: ["outcome", outcome.outcomeId] });
-      const previous = queryClient.getQueryData(["outcome", outcome.outcomeId]);
-      queryClient.setQueryData(["outcome", outcome.outcomeId], (old: any) =>
-        old ? { ...old, challenged: true, status: "challenged" } : old
-      );
-      return { previous };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previous !== undefined) {
-        queryClient.setQueryData(["outcome", outcome.outcomeId], context.previous);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["outcome", outcome.outcomeId] });
-      queryClient.invalidateQueries({ queryKey: ["contract", outcome.contractId] });
-    },
-  });
-
-  const handleChallenge = () => {
-    if (expired || challengeMutation.isPending) return;
-    challengeMutation.mutate();
-  };
+    try {
+      const activeGateway = gateway ?? new SorobanChallengeGateway();
+      const result = await activeGateway.challengeOutcome(marketId, requiredBondXlm);
+      onChallengeConfirmed(result);
+      toast.success("Challenge submitted. Council voting has started.");
+      onClose();
+    } catch (error) {
+      onChallengeFailed();
+      toast.error(error instanceof Error ? error.message : "Could not submit the challenge.");
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="challenge-outcome-title"
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.6)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: 16,
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !pending) onClose();
       }}
-      onClick={onClose}
     >
-      <div
-        ref={modalRef}
-        className="card"
-        style={{ maxWidth: 480, width: "100%", display: "flex", flexDirection: "column", gap: 16 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <h2 id="challenge-outcome-title" style={{ margin: 0 }}>
-            Challenge Proposed Outcome
-          </h2>
-          <button aria-label="Close modal" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18 }}>
+      <div className="challenge-modal" role="dialog" aria-modal="true" aria-labelledby="challenge-title">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 id="challenge-title">Challenge outcome</h2>
+          <button type="button" aria-label="Close challenge dialog" onClick={onClose} disabled={pending}>
             ×
           </button>
         </div>
 
-        <p style={{ color: "var(--muted)", margin: 0 }}>{outcome.description}</p>
-
-        <div
-          style={{
-            textAlign: "center",
-            padding: "16px 12px",
-            borderRadius: 8,
-            border: `1px solid ${expired ? "red" : "var(--border)"}`,
-            background: expired ? "rgba(255,0,0,0.08)" : "var(--bg)",
-          }}
-        >
-          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: "var(--muted)", marginBottom: 4 }}>
-            {expired ? "Challenge window closed" : "Time remaining to dispute"}
-          </div>
-          <div
-            aria-live="polite"
-            style={{
-              fontFamily: "monospace",
-              fontSize: 36,
-              fontWeight: 700,
-              color: expired ? "red" : "var(--fg)",
-            }}
-          >
-            {formatRemaining(remainingMs)}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-            Deadline: {new Date(outcome.deadline).toUTCString()}
-          </div>
+        <div className="challenge-countdown">
+          <span>Challenge window closes in</span>
+          <strong data-testid="challenge-countdown">
+            {remaining > 0 ? formatCountdown(remaining) : "Closed"}
+          </strong>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--muted)" }}>Required disputer bond</span>
-            <strong>{outcome.bondAmount}</strong>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "var(--muted)" }}>Payout on successful challenge</span>
-            <strong style={{ color: "green" }}>{outcome.payoutReward}</strong>
-          </div>
-        </div>
+        <dl className="party-facts" style={{ marginBottom: 12 }}>
+          <dt>Required disputer bond</dt>
+          <dd>{formatXlm(requiredBondXlm)}</dd>
+          <dt>Payout reward on success</dt>
+          <dd>{formatXlm(payoutRewardXlm)}</dd>
+        </dl>
+        <p style={{ color: "var(--muted)", marginBottom: 20 }}>
+          Posting a challenge locks the disputer bond until the council resolves the dispute. A successful
+          challenge returns the bond plus the reward.
+        </p>
 
-        {challengeMutation.isError && (
-          <p style={{ color: "red", margin: 0 }}>
-            {(challengeMutation.error as Error).message}
-          </p>
-        )}
-        {challengeMutation.isSuccess && (
-          <p style={{ color: "green", margin: 0 }}>Challenge submitted.</p>
-        )}
-
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button onClick={onClose} disabled={challengeMutation.isPending}>
+        <div className="modal-actions">
+          <button type="button" onClick={onClose} disabled={pending}>
             Cancel
           </button>
           <button
-            onClick={handleChallenge}
-            disabled={expired || challengeMutation.isPending || challengeMutation.isSuccess}
+            type="button"
+            className="finalize-button"
+            disabled={!canChallenge || pending}
+            onClick={() => void handleSubmit()}
           >
-            {challengeMutation.isPending
-              ? "Signing…"
-              : expired
-              ? "Window closed"
-              : "Sign & Challenge"}
+            {pending ? "Submitting…" : "Post challenge bond"}
           </button>
         </div>
       </div>
