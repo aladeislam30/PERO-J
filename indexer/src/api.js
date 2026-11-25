@@ -7,6 +7,7 @@ import { registerMarketStream } from "./marketStream.js";
 import { formatOracleDisputes, oracleDisputes } from "./oracleDisputes.js";
 import { health } from "./index.js";
 import { eventEmitter } from "./events.js";
+import { getRedis } from "./redis.js";
 import { MAX_TITLE_LEN, MAX_DESCRIPTION_LEN } from "./sanitize.js";
 import { parseSortParams } from "./query-validation.js";
 
@@ -271,6 +272,53 @@ export function createApp() {
       const rows = await oracleDisputes.fetchActive();
       res.setHeader("Cache-Control", "no-store");
       return res.json({ disputes: formatOracleDisputes(rows) });
+    })
+  );
+
+  // GET /api/v1/oracle/submissions?status= and /:marketId — Redis-cached 10s (issue #1139)
+  const SUBMISSION_STATUSES = ["pending", "challenged", "finalized"];
+  const cachedJson = async (key, load) => {
+    const redis = getRedis();
+    try {
+      const hit = await redis?.get(key);
+      if (hit) return JSON.parse(hit);
+    } catch {
+      /* cache miss on Redis failure */
+    }
+    const value = await load();
+    redis?.set(key, JSON.stringify(value), "EX", 10).catch(() => {});
+    return value;
+  };
+
+  app.get(
+    "/api/v1/oracle/submissions",
+    asyncHandler(async (req, res) => {
+      const status = req.query.status || null;
+      if (status && !SUBMISSION_STATUSES.includes(status)) {
+        return res
+          .status(400)
+          .json({ error: `status must be one of: ${SUBMISSION_STATUSES.join(", ")}` });
+      }
+      const submissions = await cachedJson(`oracle:submissions:${status ?? "all"}`, () =>
+        db.getOracleSubmissions({ status })
+      );
+      res.setHeader("Cache-Control", "public, max-age=10");
+      return res.json({ submissions });
+    })
+  );
+
+  app.get(
+    "/api/v1/oracle/submissions/:marketId",
+    asyncHandler(async (req, res) => {
+      const { marketId } = req.params;
+      const submission = await cachedJson(`oracle:submission:${marketId}`, () =>
+        db.getLatestOracleSubmission(marketId)
+      );
+      if (!submission) {
+        return res.status(404).json({ error: "Oracle submission not found" });
+      }
+      res.setHeader("Cache-Control", "public, max-age=10");
+      return res.json(submission);
     })
   );
 
