@@ -1070,6 +1070,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`5155d20`](../../commit/5155d20843d9189b998e387cb872cdd0c69359cd))
+
 - Auto-update CHANGELOG.md [skip ci] ([`8a1ca16`](../../commit/8a1ca1674f63774e8f4fe68d850b02a2ac52443d))
 
 - Auto-update CHANGELOG.md [skip ci] ([`929b861`](../../commit/929b861dc02b95d098c4d7a240e499a7e9fbc75b))
@@ -1570,6 +1572,8 @@ Closes [#1195](../../issues/1195)
 
 
 ### Features
+
+- [#1170](../../issues/1170) add public dispute detail page with bonds, votes and timeline ([`fc7132d`](../../commit/fc7132dd0527cfa80f29e63d6a54ca09a937818f))
 
 - [#1171](../../issues/1171) add Finalize Market action when challenge window expires ([`c9e94a7`](../../commit/c9e94a74e51702371edbfb862313644cefb1ff7b))
 
